@@ -1,9 +1,17 @@
 import { tableLampParts } from "@/lib/table-lamp-spec";
+import { buildReferenceGenerationPolicy } from "@/lib/image-reference-workflow";
+import type { DesignLock, ProductIdentity } from "@/types/product";
 
 export type HighResDesignVariant = {
   id: string;
   title: string;
   imageUrl: string;
+  materialPreviewUrl?: string;
+  referenceImageUrl?: string;
+  productIdentityId?: string;
+  designLockApplied?: boolean;
+  allowedEdits?: string[];
+  lockSummary?: string;
   resolution: string;
   baseMaterial: string;
   notes: string;
@@ -62,18 +70,43 @@ export const tableLampDesignVariants: HighResDesignVariant[] = [
   }
 ];
 
-export function buildProductDesignResponse(prompt: string) {
+export function buildProductDesignResponse(
+  prompt: string,
+  context: {
+    productIdentity: ProductIdentity;
+    designLock: DesignLock;
+  }
+) {
+  const policy = buildReferenceGenerationPolicy(context.productIdentity, context.designLock);
+
   return {
     prompt,
+    imageReferenceMode: "enabled",
+    referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    productIdentity: context.productIdentity,
+    designLock: context.designLock,
+    generationPolicy: policy,
     constraints: [
+      "Image Reference 模式：必须使用上传图片作为唯一产品参考",
+      "Design Lock：锁定产品轮廓、尺寸比例、零件位置、摄影角度",
       "保持产品比例",
       "保持结构",
       "只修改材质",
-      "输出高清产品图"
+      "输出高清产品图",
+      "禁止重新创造产品"
     ],
     changedPart: "大理石底座",
     protectedParts: protectedTableLampParts,
     targetMaterial: "石材材质组",
-    variants: tableLampDesignVariants
+    variants: tableLampDesignVariants.map((variant) => ({
+      ...variant,
+      imageUrl: context.productIdentity.imageReference.imageUrl,
+      materialPreviewUrl: variant.imageUrl,
+      referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+      productIdentityId: context.productIdentity.id,
+      designLockApplied: true,
+      allowedEdits: ["材质", "表面工艺"],
+      lockSummary: "轮廓、比例、零件位置和摄影角度沿用上传图片；仅替换底座石材表现。"
+    }))
   };
 }

@@ -37,12 +37,20 @@ import type { HighResColorVariant } from "@/lib/color-design";
 import { buildLibraryMaterialRecommendation, materialLibraryItems, type MaterialLibraryItem } from "@/lib/material-library";
 import type { AmazonListingImage } from "@/lib/amazon-images";
 import { tableLampDimensions, tableLampMaterials, tableLampParts, tableLampStructure } from "@/lib/table-lamp-spec";
+import {
+  createImageReference,
+  describeIdentityMaterials,
+  describeIdentityStructure,
+  toProductIdentityPreview
+} from "@/lib/image-reference-workflow";
 import type {
+  DesignLock,
   DesignConcept,
   EngineeringDrawingView,
   EngineeringExplodedPart,
   MaterialRecommendation,
   ProductAnalysis,
+  ProductIdentity,
   SavedProject,
   SellerSession,
   UploadedProduct
@@ -175,10 +183,14 @@ export function ProductStudioApp() {
     [engineeringViews, selectedEngineeringViewId]
   );
 
+  const productIdentity = analysis?.productIdentity ?? null;
+  const designLock = analysis?.designLock ?? null;
+
   const progress = useMemo(() => {
     return [
       { label: "产品", done: Boolean(product) },
       { label: "分析", done: Boolean(analysis) },
+      { label: "身份", done: Boolean(analysis?.productIdentity && analysis?.designLock) },
       { label: "方案", done: concepts.length > 0 },
       { label: "颜色", done: colorDesignResults.length > 0 },
       { label: "材质", done: Boolean(material || appliedLibraryMaterial) },
@@ -210,13 +222,17 @@ export function ProductStudioApp() {
     const reader = new FileReader();
     reader.onload = () => {
       const cleanName = productName.trim() || file.name.replace(/\.[^/.]+$/, "");
-      const nextProduct = {
+      const baseProduct: UploadedProduct = {
         id: makeId("product"),
         name: cleanName,
         category,
         fileName: file.name,
         imageUrl: String(reader.result),
         uploadedAt: new Date().toISOString()
+      };
+      const nextProduct: UploadedProduct = {
+        ...baseProduct,
+        imageReference: createImageReference(baseProduct)
       };
 
       setProduct(nextProduct);
@@ -244,12 +260,17 @@ export function ProductStudioApp() {
 
   async function analyzeProduct(targetProduct: UploadedProduct) {
     if (!session) return;
+    const imageReference = targetProduct.imageReference ?? createImageReference(targetProduct);
 
     setLoading("analyze");
     setActiveTool("ai-analysis");
     setConcepts([]);
     setSelectedConceptId(null);
     setMaterial(null);
+    setProduct((current) => {
+      if (!current || current.id !== targetProduct.id || current.imageReference) return current;
+      return { ...current, imageReference };
+    });
 
     try {
       const response = await fetch("/api/ai/analyze", {
@@ -258,11 +279,18 @@ export function ProductStudioApp() {
         body: JSON.stringify({
           productName: productName.trim() || targetProduct.name,
           category: targetProduct.category,
-          marketplace: session.marketplace
+          marketplace: session.marketplace,
+          imageReference
         })
       });
+      if (!response.ok) {
+        const error = (await response.json().catch(() => null)) as { message?: string } | null;
+        setUploadError(error?.message ?? "视觉分析失败：缺少上传图片 reference。");
+        return;
+      }
       const data = (await response.json()) as { analysis: ProductAnalysis };
       setAnalysis(data.analysis);
+      setUploadError(null);
     } finally {
       setLoading(null);
     }
@@ -274,7 +302,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateDesigns() {
-    if (!analysis) return;
+    if (!analysis?.productIdentity || !analysis.designLock) return;
 
     setLoading("design");
     setMaterial(null);
@@ -296,7 +324,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateProductDesigns() {
-    if (!product) return;
+    if (!productIdentity || !designLock) return;
 
     setLoading("product-design");
     setActiveTool("ai-design");
@@ -308,6 +336,8 @@ export function ProductStudioApp() {
         body: JSON.stringify({
           productName,
           prompt: designPrompt,
+          productIdentity,
+          designLock,
           constraints: {
             keepProportion: true,
             keepStructure: true,
@@ -331,7 +361,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateColorDesigns() {
-    if (!product) return;
+    if (!productIdentity || !designLock) return;
 
     setLoading("color-edit");
     setActiveTool("color");
@@ -343,6 +373,8 @@ export function ProductStudioApp() {
         body: JSON.stringify({
           productName,
           prompt: colorPrompt,
+          productIdentity,
+          designLock,
           constraints: {
             keepProportion: true,
             keepStructure: true,
@@ -365,7 +397,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateEngineeringDrawings() {
-    if (!product) return;
+    if (!productIdentity || !designLock) return;
 
     setLoading("engineering");
     setActiveTool("drawing");
@@ -377,6 +409,8 @@ export function ProductStudioApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName,
+          productIdentity,
+          designLock,
           dimensions: tableLampDimensions,
           components: tableLampParts
         })
@@ -398,7 +432,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateAmazonImages() {
-    if (!product) return;
+    if (!productIdentity || !designLock) return;
 
     setLoading("amazon-images");
     setActiveTool("amazon");
@@ -412,6 +446,8 @@ export function ProductStudioApp() {
           productName,
           category,
           marketplace: session?.marketplace ?? "US",
+          productIdentity,
+          designLock,
           resolution: "1600 x 1600",
           imageCount: 9
         })
@@ -429,7 +465,7 @@ export function ProductStudioApp() {
   }
 
   async function handleModifyMaterial() {
-    if (!selectedConceptId) return;
+    if (!selectedConceptId || !productIdentity || !designLock) return;
 
     setLoading("material");
 
@@ -440,7 +476,9 @@ export function ProductStudioApp() {
         body: JSON.stringify({
           conceptId: selectedConceptId,
           materialFamily,
-          finish
+          finish,
+          productIdentity,
+          designLock
         })
       });
       const data = (await response.json()) as { recommendation: MaterialRecommendation };
@@ -455,6 +493,8 @@ export function ProductStudioApp() {
   }
 
   function handleApplyLibraryMaterial(item: MaterialLibraryItem) {
+    if (!productIdentity || !designLock) return;
+
     setAppliedLibraryMaterial(item);
     setMaterial(buildLibraryMaterialRecommendation(item));
     setMaterialFamily(item.name);
@@ -478,6 +518,8 @@ export function ProductStudioApp() {
         name: productName.trim() || product.name,
         category
       },
+      productIdentity,
+      designLock,
       analysis,
       concepts,
       material,
@@ -560,6 +602,8 @@ export function ProductStudioApp() {
           productName={productName}
           activeTool={activeTool}
           progress={progress}
+          productIdentity={productIdentity}
+          designLock={designLock}
           material={material}
           selectedConcept={selectedConcept}
           uploadAnalysisDetails={uploadAnalysisDetails}
@@ -577,6 +621,8 @@ export function ProductStudioApp() {
           productName={productName}
           category={category}
           analysis={analysis}
+          productIdentity={productIdentity}
+          designLock={designLock}
           concepts={concepts}
           selectedConceptId={selectedConceptId}
           material={material}
@@ -774,6 +820,8 @@ function ProductCanvas({
   productName,
   activeTool,
   progress,
+  productIdentity,
+  designLock,
   material,
   selectedConcept,
   uploadAnalysisDetails,
@@ -788,6 +836,8 @@ function ProductCanvas({
   productName: string;
   activeTool: string;
   progress: Array<{ label: string; done: boolean }>;
+  productIdentity: ProductIdentity | null;
+  designLock: DesignLock | null;
   material: MaterialRecommendation | null;
   selectedConcept: DesignConcept | null;
   uploadAnalysisDetails: UploadAnalysisDetails;
@@ -800,7 +850,8 @@ function ProductCanvas({
 }) {
   const activeLabel = menuItems.find((item) => item.id === activeTool)?.label ?? "AI设计";
   const renderVariant = selectedColorVariant ?? selectedDesignVariant;
-  const renderImageUrl = selectedEngineeringView?.imageUrl ?? selectedAmazonImage?.imageUrl ?? appliedLibraryMaterial?.productRenderUrl ?? renderVariant?.imageUrl;
+  const lockedMaterialRenderUrl = appliedLibraryMaterial ? productIdentity?.imageReference.imageUrl ?? appliedLibraryMaterial.productRenderUrl : undefined;
+  const renderImageUrl = selectedEngineeringView?.imageUrl ?? selectedAmazonImage?.imageUrl ?? lockedMaterialRenderUrl ?? renderVariant?.imageUrl;
   const renderTitle = selectedEngineeringView ? `工程图 / ${selectedEngineeringView.title}` : selectedAmazonImage ? `Amazon图片 / ${selectedAmazonImage.title}` : appliedLibraryMaterial ? `材质库 / ${appliedLibraryMaterial.name}` : renderVariant?.title ?? productName;
   const renderResolution = selectedEngineeringView?.resolution ?? selectedAmazonImage?.resolution ?? appliedLibraryMaterial?.resolution ?? renderVariant?.resolution;
 
@@ -812,8 +863,13 @@ function ProductCanvas({
             画布 / {activeLabel}
           </span>
           <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-200">
-            实时 AI
+            {productIdentity ? "Image Reference 已锁定" : "等待视觉分析"}
           </span>
+          {designLock ? (
+            <span className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1.5 text-xs font-semibold text-cyan-100">
+              Design Lock
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500">
           <span>3D 视图</span>
@@ -886,12 +942,12 @@ function ProductCanvas({
                 ) : selectedColorVariant ? (
                   <div className="absolute bottom-4 right-4 rounded-md border border-cyan-400/20 bg-black/60 px-3 py-2">
                     <p className="text-xs font-semibold text-cyan-100">{selectedColorVariant.shadeColor}</p>
-                    <p className="text-[11px] text-zinc-500">Only glass shade color changed</p>
+                    <p className="text-[11px] text-zinc-500">仅修改玻璃灯罩颜色</p>
                   </div>
                 ) : selectedDesignVariant ? (
                   <div className="absolute bottom-4 right-4 rounded-md border border-cyan-400/20 bg-black/60 px-3 py-2">
                     <p className="text-xs font-semibold text-cyan-100">{selectedDesignVariant.baseMaterial}</p>
-                    <p className="text-[11px] text-zinc-500">Only base material changed</p>
+                    <p className="text-[11px] text-zinc-500">仅修改底座材质</p>
                   </div>
                 ) : material ? (
                   <div className="absolute bottom-4 right-4 rounded-md border border-cyan-400/20 bg-black/60 px-3 py-2">
@@ -915,6 +971,14 @@ function ProductCanvas({
                   </div>
                 </div>
               </div>
+              {designLock ? (
+                <div className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-200">Design Lock</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-300">
+                    锁定产品轮廓、尺寸比例、零件位置、摄影角度；仅允许修改 {designLock.allowedEdits.join(" / ")}。
+                  </p>
+                </div>
+              ) : null}
               <div className="mx-auto mt-5 h-5 w-2/3 rounded-[50%] bg-black/60 blur-lg" />
             </div>
           ) : (
@@ -940,6 +1004,8 @@ function AIAssistantPanel({
   productName,
   category,
   analysis,
+  productIdentity,
+  designLock,
   concepts,
   selectedConceptId,
   material,
@@ -990,6 +1056,8 @@ function AIAssistantPanel({
   productName: string;
   category: string;
   analysis: ProductAnalysis | null;
+  productIdentity: ProductIdentity | null;
+  designLock: DesignLock | null;
   concepts: DesignConcept[];
   selectedConceptId: string | null;
   material: MaterialRecommendation | null;
@@ -1035,6 +1103,8 @@ function AIAssistantPanel({
   onOpenProject: (project: SavedProject) => void;
   onUpload: () => void;
 }) {
+  const productIdentityJson = productIdentity ? JSON.stringify(toProductIdentityPreview(productIdentity), null, 2) : "";
+
   return (
     <aside className="row-span-2 overflow-hidden bg-[#0b0c0f]">
       <div className="flex h-full flex-col">
@@ -1084,12 +1154,58 @@ function AIAssistantPanel({
             {uploadError ? <p className="mt-2 rounded border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs text-red-200">{uploadError}</p> : null}
           </PanelBlock>
 
+          <PanelBlock title="Image Reference模式">
+            {!product ? (
+              <EmptyPanel icon={ImagePlus} label="上传产品后建立图片引用" />
+            ) : !productIdentity || !designLock ? (
+              <div className="rounded-md border border-amber-400/25 bg-amber-400/10 p-3">
+                <p className="text-xs font-bold text-amber-100">等待视觉模型分析</p>
+                <p className="mt-2 text-[11px] leading-5 text-zinc-400">
+                  上传图已就绪，但还没有 Product Identity JSON。生成图片前必须先锁定上传产品身份。
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-md border border-emerald-400/20 bg-emerald-400/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold text-emerald-100">Reference 已锁定</p>
+                    <span className="rounded bg-black/35 px-2 py-0.5 text-[10px] font-bold text-emerald-100">
+                      {productIdentity.imageReference.referenceStrength}
+                    </span>
+                  </div>
+                  <p className="mt-2 truncate text-[11px] text-zinc-300">{productIdentity.imageReference.fileName}</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">Identity / {productIdentity.id}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {["产品轮廓", "尺寸比例", "零件位置", "摄影角度"].map((item) => (
+                    <div key={item} className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1.5 text-[11px] font-semibold text-cyan-100">
+                      锁定 {item}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-zinc-500">允许修改</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {designLock.allowedEdits.map((item) => (
+                      <span key={item} className="rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[11px] font-semibold text-emerald-100">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <pre className="max-h-56 overflow-auto rounded-md border border-white/10 bg-black/35 p-3 text-[10px] leading-4 text-zinc-400">
+                  {productIdentityJson}
+                </pre>
+              </div>
+            )}
+          </PanelBlock>
+
           <PanelBlock title="AI流程">
             <div className="grid gap-2">
               <ActionButton disabled={!product} loading={loading === "analyze"} icon={ScanLine} onClick={onAnalyze}>
                 AI分析产品
               </ActionButton>
-              <ActionButton disabled={!analysis} loading={loading === "design"} icon={Sparkles} onClick={onGenerateDesigns}>
+              <ActionButton disabled={!productIdentity || !designLock} loading={loading === "design"} icon={Sparkles} onClick={onGenerateDesigns}>
                 生成设计方案
               </ActionButton>
             </div>
@@ -1110,7 +1226,7 @@ function AIAssistantPanel({
               <EmptyPanel icon={ScanLine} label="上传 JPG 或 PNG 后自动分析" />
             ) : loading === "analyze" ? (
               <div className="rounded-md border border-cyan-400/25 bg-cyan-400/10 p-3 text-sm font-semibold text-cyan-100">
-                正在识别产品类型、结构、材质和可编辑区域...
+                正在调用视觉模型识别产品类型、零件结构、材质、比例和关键特征...
               </div>
             ) : (
               <div className="space-y-3">
@@ -1141,13 +1257,13 @@ function AIAssistantPanel({
               />
             </label>
             <div className="mb-3 grid grid-cols-2 gap-2">
-              {["保持产品比例", "保持结构", "只修改材质", "生成6个方案"].map((rule) => (
+              {["Image Reference", "Design Lock", "只修改材质", "禁止重创产品"].map((rule) => (
                 <div key={rule} className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1.5 text-[11px] font-semibold text-emerald-100">
                   {rule}
                 </div>
               ))}
             </div>
-            <ActionButton disabled={!product} loading={loading === "product-design"} icon={Wand2} onClick={onGenerateProductDesigns}>
+            <ActionButton disabled={!productIdentity || !designLock} loading={loading === "product-design"} icon={Wand2} onClick={onGenerateProductDesigns}>
               生成6个高清方案
             </ActionButton>
 
@@ -1169,6 +1285,7 @@ function AIAssistantPanel({
                         </div>
                         <p className="mt-2 truncate text-xs font-bold text-zinc-100">{variant.title}</p>
                         <p className="text-[11px] text-zinc-500">{variant.resolution}</p>
+                        {variant.lockSummary ? <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-emerald-200">{variant.lockSummary}</p> : null}
                       </button>
                       <a
                         className="mt-2 inline-flex h-7 w-full items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] text-[11px] font-bold text-zinc-200 transition hover:bg-white hover:text-black"
@@ -1201,7 +1318,7 @@ function AIAssistantPanel({
                 </div>
               ))}
             </div>
-            <ActionButton disabled={!product} loading={loading === "color-edit"} icon={Palette} onClick={onGenerateColorDesigns}>
+            <ActionButton disabled={!productIdentity || !designLock} loading={loading === "color-edit"} icon={Palette} onClick={onGenerateColorDesigns}>
               生成4个灯罩颜色
             </ActionButton>
 
@@ -1223,6 +1340,7 @@ function AIAssistantPanel({
                         </div>
                         <p className="mt-2 truncate text-xs font-bold text-zinc-100">{variant.title}</p>
                         <p className="text-[11px] text-zinc-500">{variant.resolution}</p>
+                        {variant.lockSummary ? <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-emerald-200">{variant.lockSummary}</p> : null}
                       </button>
                       <a
                         className="mt-2 inline-flex h-7 w-full items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.06] text-[11px] font-bold text-zinc-200 transition hover:bg-white hover:text-black"
@@ -1278,7 +1396,7 @@ function AIAssistantPanel({
                       selected ? "border-cyan-300/60 bg-cyan-400/10" : "border-white/10 bg-black/25 hover:border-white/20 hover:bg-white/[0.05]"
                     } disabled:cursor-not-allowed disabled:opacity-45`}
                     type="button"
-                    disabled={!product}
+                    disabled={!productIdentity || !designLock}
                     onClick={() => onApplyLibraryMaterial(item)}
                   >
                     <div className="aspect-[4/3] overflow-hidden rounded bg-black">
@@ -1316,7 +1434,7 @@ function AIAssistantPanel({
                 </p>
               </div>
             ) : (
-              <p className="text-[11px] leading-5 text-zinc-500">上传产品后，点击材质即可应用到玻璃灯罩或大理石底座。</p>
+              <p className="text-[11px] leading-5 text-zinc-500">上传并完成视觉分析后，点击材质即可应用到玻璃灯罩或大理石底座，并保持原产品 reference。</p>
             )}
           </PanelBlock>
 
@@ -1334,7 +1452,7 @@ function AIAssistantPanel({
                 </div>
               ))}
             </div>
-            <ActionButton disabled={!product} loading={loading === "engineering"} icon={PenTool} onClick={onGenerateEngineeringDrawings}>
+            <ActionButton disabled={!productIdentity || !designLock} loading={loading === "engineering"} icon={PenTool} onClick={onGenerateEngineeringDrawings}>
               生成工程尺寸图
             </ActionButton>
 
@@ -1409,10 +1527,10 @@ function AIAssistantPanel({
             <div className="mb-3 rounded-md border border-white/10 bg-black/25 p-3">
               <p className="text-xs font-bold text-zinc-100">美国 Amazon 规则</p>
               <p className="mt-2 text-[11px] leading-5 text-zinc-500">
-                主图纯白底、无文字、无徽章、无道具；副图用于卖点、尺寸、材质、场景、包装和品牌故事，避免虚假认证和评分语言。
+                主图纯白底、无文字、无徽章、无道具；所有图片必须使用上传产品作为 reference，避免虚假认证、评分语言和随机替换产品。
               </p>
             </div>
-            <ActionButton disabled={!product} loading={loading === "amazon-images"} icon={FileImage} onClick={onGenerateAmazonImages}>
+            <ActionButton disabled={!productIdentity || !designLock} loading={loading === "amazon-images"} icon={FileImage} onClick={onGenerateAmazonImages}>
               自动生成9张Amazon图片
             </ActionButton>
 
@@ -1475,7 +1593,7 @@ function AIAssistantPanel({
                 ))}
               </select>
             </label>
-            <ActionButton disabled={!selectedConceptId} loading={loading === "material"} icon={Brush} onClick={onModifyMaterial}>
+            <ActionButton disabled={!selectedConceptId || !productIdentity || !designLock} loading={loading === "material"} icon={Brush} onClick={onModifyMaterial}>
               应用材质
             </ActionButton>
             {material ? <p className="mt-3 text-xs leading-5 text-zinc-400">{material.surfaceTreatment}</p> : null}
@@ -1716,6 +1834,15 @@ function buildUploadAnalysisDetails(
   analysis: ProductAnalysis | null,
   material: MaterialRecommendation | null
 ): UploadAnalysisDetails {
+  if (analysis?.productIdentity) {
+    return {
+      productType: analysis.productIdentity.productType,
+      structure: describeIdentityStructure(analysis.productIdentity),
+      material: material?.shellMaterial ?? describeIdentityMaterials(analysis.productIdentity),
+      editableAreas: analysis.productIdentity.editableAreas
+    };
+  }
+
   const category = analysis?.category ?? product?.category ?? "待识别";
   const presets: Record<string, Omit<UploadAnalysisDetails, "productType">> = {
     "Kitchen & Dining": {

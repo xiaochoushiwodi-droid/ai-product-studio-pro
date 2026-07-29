@@ -1,4 +1,6 @@
 import { tableLampDimensions, tableLampParts } from "@/lib/table-lamp-spec";
+import { buildReferenceGenerationPolicy } from "@/lib/image-reference-workflow";
+import type { DesignLock, ProductIdentity } from "@/types/product";
 
 export type AmazonListingImage = {
   id: string;
@@ -6,6 +8,10 @@ export type AmazonListingImage = {
   title: string;
   imageType: string;
   imageUrl: string;
+  layoutPreviewUrl?: string;
+  referenceImageUrl?: string;
+  productIdentityId?: string;
+  designLockApplied?: boolean;
   resolution: "1600 x 1600";
   amazonUse: "主图" | "副图";
   complianceNotes: string[];
@@ -106,9 +112,22 @@ export const amazonListingImages: AmazonListingImage[] = [
   }
 ];
 
-export function buildAmazonListingImageResponse(productName: string) {
+export function buildAmazonListingImageResponse(
+  productName: string,
+  context: {
+    productIdentity: ProductIdentity;
+    designLock: DesignLock;
+  }
+) {
+  const policy = buildReferenceGenerationPolicy(context.productIdentity, context.designLock);
+
   return {
     productName,
+    imageReferenceMode: "enabled",
+    referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    productIdentity: context.productIdentity,
+    designLock: context.designLock,
+    generationPolicy: policy,
     marketplace: "Amazon US",
     resolution: "1600 x 1600",
     dimensions: tableLampDimensions,
@@ -119,6 +138,19 @@ export function buildAmazonListingImageResponse(productName: string) {
       "副图可使用卖点、尺寸、材质、场景、包装和品牌故事内容。",
       "避免虚假认证、评分语言、促销价格、竞品 Logo 和无法证明的安全声明。"
     ],
-    images: amazonListingImages
+    images: amazonListingImages.map((image) => ({
+      ...image,
+      imageUrl: context.productIdentity.imageReference.imageUrl,
+      layoutPreviewUrl: image.imageUrl,
+      referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+      productIdentityId: context.productIdentity.id,
+      designLockApplied: true,
+      complianceNotes: [
+        ...image.complianceNotes,
+        "使用上传产品作为 reference",
+        "锁定原产品轮廓、比例、零件位置和摄影角度",
+        "禁止重新创造或替换为随机产品"
+      ]
+    }))
   };
 }

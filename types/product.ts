@@ -12,13 +12,70 @@ export type UploadedProduct = {
   category: string;
   fileName: string;
   imageUrl: string;
+  imageReference?: ImageReference;
   uploadedAt: string;
+};
+
+export type ImageReference = {
+  mode: "image-reference";
+  sourceProductId: string;
+  fileName: string;
+  imageUrl: string;
+  uploadedAt: string;
+  referenceStrength: "strict";
+};
+
+export type AllowedProductEdit = "材质" | "颜色" | "表面工艺" | "使用场景";
+
+export type ProductIdentityMaterial = {
+  part: string;
+  material: string;
+  editableProperties: AllowedProductEdit[];
+};
+
+export type ProductIdentity = {
+  id: string;
+  sourceProductId: string;
+  productType: string;
+  partStructure: string[];
+  materials: ProductIdentityMaterial[];
+  proportions: {
+    overall: string;
+    dimensions?: {
+      heightCm?: number;
+      shadeCm?: number;
+      baseCm?: number;
+    };
+    relationships: string[];
+  };
+  keyFeatures: string[];
+  editableAreas: string[];
+  imageReference: ImageReference;
+  visionModel: {
+    name: string;
+    status: "completed";
+    analyzedAt: string;
+  };
+};
+
+export type DesignLock = {
+  mode: "strict-reference-lock";
+  productOutline: "locked";
+  sizeProportion: "locked";
+  partPositions: "locked";
+  cameraAngle: "locked";
+  allowedEdits: AllowedProductEdit[];
+  forbiddenChanges: string[];
+  validationRule: string;
 };
 
 export type ProductAnalysis = {
   productName: string;
   category: string;
   marketplace: Marketplace;
+  imageReferenceMode: "enabled";
+  productIdentity: ProductIdentity;
+  designLock: DesignLock;
   opportunityScore: number;
   targetBuyer: string;
   positioning: string;
@@ -79,6 +136,8 @@ export type SavedProject = {
   sellerName: string;
   marketplace: Marketplace;
   product: UploadedProduct;
+  productIdentity: ProductIdentity | null;
+  designLock: DesignLock | null;
   analysis: ProductAnalysis | null;
   concepts: DesignConcept[];
   material: MaterialRecommendation | null;

@@ -1,5 +1,6 @@
 import { tableLampDimensions, tableLampParts, tableLampStructure } from "@/lib/table-lamp-spec";
-import type { EngineeringDrawingView, EngineeringExplodedPart } from "@/types/product";
+import { buildReferenceGenerationPolicy } from "@/lib/image-reference-workflow";
+import type { DesignLock, EngineeringDrawingView, EngineeringExplodedPart, ProductIdentity } from "@/types/product";
 
 export const tableLampExplodedParts: EngineeringExplodedPart[] = [
   {
@@ -102,10 +103,23 @@ export const engineeringDrawingViews: EngineeringDrawingView[] = [
   }
 ];
 
-export function buildEngineeringDrawingResponse(productName: string) {
+export function buildEngineeringDrawingResponse(
+  productName: string,
+  context: {
+    productIdentity: ProductIdentity;
+    designLock: DesignLock;
+  }
+) {
+  const policy = buildReferenceGenerationPolicy(context.productIdentity, context.designLock);
+
   return {
     productName,
     mode: "engineering-dimensions",
+    imageReferenceMode: "enabled",
+    referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    productIdentity: context.productIdentity,
+    designLock: context.designLock,
+    generationPolicy: policy,
     input: "生成正视图、侧视图、顶视图、爆炸图，并自动拆解产品结构。",
     dimensions: tableLampDimensions,
     structure: tableLampStructure,

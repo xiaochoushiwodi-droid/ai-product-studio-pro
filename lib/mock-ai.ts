@@ -1,10 +1,12 @@
 import type {
   DesignConcept,
+  ImageReference,
   Marketplace,
   MaterialRecommendation,
   ProductAnalysis
 } from "@/types/product";
 import { makeId } from "@/lib/utils";
+import { buildProductIdentityFromVision, buildStrictDesignLock } from "@/lib/image-reference-workflow";
 
 const categorySignals: Record<
   string,
@@ -93,14 +95,24 @@ export function buildProductAnalysis(input: {
   productName: string;
   category: string;
   marketplace: Marketplace;
+  imageReference: ImageReference;
 }): ProductAnalysis {
   const signal = categorySignals[input.category] ?? categorySignals["Kitchen & Dining"];
   const score = 78 + (input.productName.length % 12);
+  const productIdentity = buildProductIdentityFromVision({
+    productName: input.productName,
+    category: input.category,
+    imageReference: input.imageReference
+  });
+  const designLock = buildStrictDesignLock();
 
   return {
     productName: input.productName,
     category: input.category,
     marketplace: input.marketplace,
+    imageReferenceMode: "enabled",
+    productIdentity,
+    designLock,
     opportunityScore: Math.min(score, 92),
     targetBuyer: signal.buyer,
     positioning: `${input.productName} 可以通过可见的品质升级、明确的 Amazon 卖点角度和易验证的材料/结构证据提升转化。`,
@@ -121,32 +133,35 @@ export function buildProductAnalysis(input: {
 }
 
 export function buildDesignConcepts(analysis: ProductAnalysis): DesignConcept[] {
+  const identity = analysis.productIdentity;
+  const allowed = analysis.designLock.allowedEdits.join(" / ");
+
   return [
     {
       id: makeId("concept"),
-      title: "差评风险控制核心",
-      promise: "在上线前优先降低最可能出现的两类差评触发点。",
-      rationale: `使用${analysis.designLevers[0]}和更清晰的产品证据，让品质在缩略图和详情页中可见。`,
+      title: "Reference材质强化",
+      promise: "只在原产品轮廓内提升材质可信度，降低买家对廉价感的担忧。",
+      rationale: `${identity.productType} 的轮廓、比例、零件位置和摄影角度已经锁定；本方向只修改 ${allowed}。`,
       featureChanges: [
-        analysis.designLevers[0],
-        "增加一个对比细节，突出主要用户接触点。",
-        "为包装正面建立前三个购买理由的图标行。"
+        "保留上传图片中的产品外形和部件布局。",
+        "仅替换可编辑零件的材质纹理与光泽参数。",
+        "用近景图解释材质来源、纹理和表面处理，不添加新零件。"
       ],
       colorPalette: ["石墨黑", "暖白", "信号琥珀"],
-      manufacturingImpact: "Medium",
+      manufacturingImpact: "Low",
       listingAngle: `面向${analysis.targetBuyer}`,
       score: Math.min(analysis.opportunityScore + 2, 96),
-      risks: ["修改后的部件公差需要供应商验证。"]
+      risks: ["材质声明必须有供应商文件支撑。"]
     },
     {
       id: makeId("concept"),
-      title: "高端货架升级",
-      promise: "让产品摆脱同质化低价商品感。",
-      rationale: "在不改变基础使用方式的前提下，通过表面处理、比例和包装层级提升感知价值。",
+      title: "颜色与表面工艺组",
+      promise: "在不改变结构的前提下，用颜色和表面处理建立高端视觉层级。",
+      rationale: "生成模型必须以上传图为 reference，不允许重画产品，只能在可编辑区域做颜色和工艺变化。",
       featureChanges: [
-        "优化轮廓，使用更克制的边缘圆角和更清晰的分件线。",
-        analysis.designLevers[1] ?? "增加人体工学触点细节。",
-        "附带简洁快速说明卡，同时降低使用误解带来的差评风险。"
+        "保持原摄影角度、透视和产品位置。",
+        "只调整玻璃、金属或石材可见面的颜色、透明度、粗糙度和高光。",
+        "主图和副图统一使用原产品身份，避免同类随机产品混入。"
       ],
       colorPalette: ["深绿", "石材", "拉丝镍"],
       manufacturingImpact: "Low",
@@ -156,19 +171,19 @@ export function buildDesignConcepts(analysis: ProductAnalysis): DesignConcept[] 
     },
     {
       id: makeId("concept"),
-      title: "紧凑套装系统",
-      promise: "用真正有用的套装提升转化，而不是堆砌配件。",
-      rationale: "通过更小包装体积和附加实用性，同时优化 FBA 经济性和买家价值感。",
+      title: "场景与Amazon图组",
+      promise: "围绕原产品 reference 生成白底、尺寸、材质和场景图片，不替换产品主体。",
+      rationale: "使用场景可以变化，但产品轮廓、比例、零件位置和摄影角度必须由 Product Identity 控制。",
       featureChanges: [
-        "通过嵌套或扁平化布局降低包装体积。",
-        analysis.designLevers[2] ?? "增加一个二次使用配件。",
-        "组合一个耗材或养护配件，支持复购逻辑。"
+        "白底主图使用原产品主体，不添加道具或文字。",
+        "场景图只替换背景和光线氛围，不改变产品外观结构。",
+        "包装与品牌故事图使用同一 Product Identity，避免跨图产品不一致。"
       ],
-      colorPalette: ["海洋蓝", "雾灰", "珊瑚色点缀"],
-      manufacturingImpact: "High",
-      listingAngle: "单位体积功能更多，为 Prime 履约优化。",
-      score: Math.max(analysis.opportunityScore - 1, 70),
-      risks: ["套装范围扩大可能增加验货复杂度和落地成本。"]
+      colorPalette: ["暖白", "雾灰", "浅木色"],
+      manufacturingImpact: "Low",
+      listingAngle: "原产品一致性强，适合 Amazon 详情页成组展示。",
+      score: Math.max(analysis.opportunityScore, 72),
+      risks: ["场景图不得暗示未随货配送的道具或配件。"]
     }
   ];
 }

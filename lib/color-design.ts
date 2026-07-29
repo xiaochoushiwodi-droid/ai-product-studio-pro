@@ -1,9 +1,17 @@
 import { tableLampParts } from "@/lib/table-lamp-spec";
+import { buildReferenceGenerationPolicy } from "@/lib/image-reference-workflow";
+import type { DesignLock, ProductIdentity } from "@/types/product";
 
 export type HighResColorVariant = {
   id: string;
   title: string;
   imageUrl: string;
+  colorPreviewUrl?: string;
+  referenceImageUrl?: string;
+  productIdentityId?: string;
+  designLockApplied?: boolean;
+  allowedEdits?: string[];
+  lockSummary?: string;
   resolution: string;
   shadeColor: string;
   changedPart: string;
@@ -56,18 +64,43 @@ export const tableLampShadeColorVariants: HighResColorVariant[] = [
   }
 ];
 
-export function buildColorEditResponse(prompt: string) {
+export function buildColorEditResponse(
+  prompt: string,
+  context: {
+    productIdentity: ProductIdentity;
+    designLock: DesignLock;
+  }
+) {
+  const policy = buildReferenceGenerationPolicy(context.productIdentity, context.designLock);
+
   return {
     prompt,
+    imageReferenceMode: "enabled",
+    referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    productIdentity: context.productIdentity,
+    designLock: context.designLock,
+    generationPolicy: policy,
     constraints: [
+      "Image Reference 模式：必须使用上传图片作为唯一产品参考",
+      "Design Lock：锁定产品轮廓、尺寸比例、零件位置、摄影角度",
       "保持产品比例",
       "保持结构",
       "只修改玻璃灯罩颜色",
-      "保持玻璃透明质感"
+      "保持玻璃透明质感",
+      "禁止重新创造产品"
     ],
     changedPart: "玻璃灯罩",
     protectedParts: protectedTableLampParts,
     targetColors: ["琥珀色", "烟灰色", "橄榄绿", "透明"],
-    variants: tableLampShadeColorVariants
+    variants: tableLampShadeColorVariants.map((variant) => ({
+      ...variant,
+      imageUrl: context.productIdentity.imageReference.imageUrl,
+      colorPreviewUrl: variant.imageUrl,
+      referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+      productIdentityId: context.productIdentity.id,
+      designLockApplied: true,
+      allowedEdits: ["颜色", "表面工艺"],
+      lockSummary: "轮廓、比例、零件位置和摄影角度沿用上传图片；仅修改玻璃灯罩颜色与透明质感。"
+    }))
   };
 }
