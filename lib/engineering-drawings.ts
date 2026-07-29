@@ -119,6 +119,9 @@ export function buildEngineeringDrawingResponse(
     mode: "engineering-dimensions",
     imageReferenceMode: "enabled",
     referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    original_reference: context.productIdentity.imageReference,
+    product_identity: context.productIdentity,
+    design_lock: context.designLock,
     productIdentity: context.productIdentity,
     designLock: context.designLock,
     targetRegion: context.targetRegion,
@@ -130,6 +133,11 @@ export function buildEngineeringDrawingResponse(
     components: tableLampParts,
     autoExplodedParts: tableLampExplodedParts,
     count: engineeringDrawingViews.length,
-    views: engineeringDrawingViews
+    views: engineeringDrawingViews.map((view) => ({
+      ...view,
+      original_reference: context.productIdentity.imageReference,
+      product_identity: context.productIdentity,
+      design_lock: context.designLock
+    }))
   };
 }

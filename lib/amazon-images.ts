@@ -12,6 +12,9 @@ export type AmazonListingImage = {
   referenceImageUrl?: string;
   productIdentityId?: string;
   designLockApplied?: boolean;
+  original_reference?: ProductIdentity["imageReference"];
+  product_identity?: ProductIdentity;
+  design_lock?: DesignLock;
   targetRegion?: string;
   generatedPrompt?: string;
   resolution: "1600 x 1600";
@@ -129,6 +132,9 @@ export function buildAmazonListingImageResponse(
     productName,
     imageReferenceMode: "enabled",
     referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    original_reference: context.productIdentity.imageReference,
+    product_identity: context.productIdentity,
+    design_lock: context.designLock,
     productIdentity: context.productIdentity,
     designLock: context.designLock,
     targetRegion: context.targetRegion,
@@ -149,6 +155,9 @@ export function buildAmazonListingImageResponse(
       imageUrl: context.productIdentity.imageReference.imageUrl,
       layoutPreviewUrl: image.imageUrl,
       referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+      original_reference: context.productIdentity.imageReference,
+      product_identity: context.productIdentity,
+      design_lock: context.designLock,
       productIdentityId: context.productIdentity.id,
       designLockApplied: true,
       targetRegion: context.targetRegion?.label ?? "Scene",

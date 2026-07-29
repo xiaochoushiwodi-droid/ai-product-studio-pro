@@ -97,6 +97,106 @@ export type LightingKnowledgeRule = {
   designUse: string;
 };
 
+export type MarketingCopyMode = "amazon-conversion" | "luxury-brand" | "simple-selling";
+
+export type MarketingLanguage = "en" | "zh" | "ja" | "de";
+
+export type MarketingCopy = {
+  id: string;
+  productId: string;
+  productIdentityId: string;
+  designLockMode: DesignLock["mode"];
+  mode: MarketingCopyMode;
+  language: MarketingLanguage;
+  title: string;
+  bulletPoints: string[];
+  imageCopy: string[];
+  listingDescription: string;
+  translations: Record<MarketingLanguage, {
+    title: string;
+    imageCopy: string[];
+  }>;
+  createdAt: string;
+};
+
+export type MarketingTemplateKind =
+  | "main-image"
+  | "feature-image"
+  | "dimension-image"
+  | "material-image"
+  | "lifestyle-bedroom"
+  | "lifestyle-living-room"
+  | "lifestyle-office"
+  | "lifestyle-hotel"
+  | "detail-image"
+  | "package-image"
+  | "brand-story";
+
+export type MarketingTemplate = {
+  id: string;
+  imageIndex: number;
+  kind: MarketingTemplateKind;
+  name: string;
+  size: {
+    width: 1600;
+    height: 1600;
+  };
+  rules: string[];
+  layoutRules: string[];
+  sceneOptions?: Array<"Bedroom" | "Living Room" | "Office" | "Hotel">;
+};
+
+export type MarketingLayerIcon = "sparkle" | "check" | "ruler" | "gem" | "package" | "story";
+
+export type MarketingEditorLayer = {
+  id: string;
+  type: "text" | "icon";
+  text: string;
+  icon?: MarketingLayerIcon;
+  x: number;
+  y: number;
+  width: number;
+  fontSize: number;
+  fontFamily: string;
+  fontWeight: "500" | "600" | "700" | "800";
+  color: string;
+  opacity: number;
+  align: "left" | "center" | "right";
+};
+
+export type MarketingAutoLayout = {
+  id: string;
+  imageId: string;
+  templateId: string;
+  templateName: string;
+  imageIndex: number;
+  imageUrl: string;
+  layoutPreviewUrl?: string;
+  language: MarketingLanguage;
+  copyMode: MarketingCopyMode;
+  title: string;
+  layers: MarketingEditorLayer[];
+  original_reference: ImageReference;
+  product_identity: ProductIdentity;
+  design_lock: DesignLock;
+  generatedAt: string;
+};
+
+export type MarketingAsset = {
+  id: string;
+  productId: string;
+  imageId: string;
+  copyText: string;
+  template: MarketingTemplate;
+  version: string;
+  language: MarketingLanguage;
+  layout: MarketingAutoLayout;
+  original_reference: ImageReference;
+  product_identity: ProductIdentity;
+  design_lock: DesignLock;
+  createdAt: string;
+};
+
 export type ReferenceGenerationPrompt = {
   systemPrompt: string;
   userPrompt: string;
@@ -157,6 +257,9 @@ export type EngineeringDrawingView = {
   resolution: string;
   scale: string;
   drawingNotes: string[];
+  original_reference?: ImageReference;
+  product_identity?: ProductIdentity;
+  design_lock?: DesignLock;
 };
 
 export type EngineeringExplodedPart = {
@@ -167,7 +270,7 @@ export type EngineeringExplodedPart = {
   editableScope: string;
 };
 
-export type DesignVersionKind = "product-design" | "color-edit" | "material-library" | "material-edit" | "amazon-images" | "engineering";
+export type DesignVersionKind = "product-design" | "color-edit" | "material-library" | "material-edit" | "amazon-images" | "engineering" | "marketing-layout";
 
 export type DesignVersion = {
   id: string;
@@ -198,6 +301,9 @@ export type SavedProject = {
   engineeringViews?: EngineeringDrawingView[];
   engineeringParts?: EngineeringExplodedPart[];
   designVersions?: DesignVersion[];
+  marketingCopy?: MarketingCopy | null;
+  marketingAssets?: MarketingAsset[];
+  marketingTemplates?: MarketingTemplate[];
   savedAt: string;
   status: "Draft" | "Ready for sampling";
 };

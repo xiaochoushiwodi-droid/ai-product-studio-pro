@@ -16,6 +16,7 @@ import {
   Home,
   ImagePlus,
   Library,
+  LayoutTemplate,
   Lightbulb,
   LogOut,
   Move3D,
@@ -25,7 +26,9 @@ import {
   Save,
   ScanLine,
   Sparkles,
+  ShoppingCart,
   SunMedium,
+  TextCursorInput,
   Upload,
   Wand2
 } from "lucide-react";
@@ -33,6 +36,10 @@ import { LoginCard } from "@/components/auth/login-card";
 import { DesignLockPanel } from "@/components/dashboard/design-lock-panel";
 import { DesignVersionHistory } from "@/components/dashboard/design-version-history";
 import { LightingKnowledgePanel } from "@/components/dashboard/lighting-knowledge-panel";
+import { MarketingCopyPanel } from "@/components/dashboard/marketing-copy-panel";
+import { MarketingImageEditor } from "@/components/dashboard/marketing-image-editor";
+import { MarketingLayerInspector } from "@/components/dashboard/marketing-layer-inspector";
+import { MarketingTemplateLibrary } from "@/components/dashboard/marketing-template-library";
 import { ProductIdentityPanel } from "@/components/dashboard/product-identity-panel";
 import { ProductMaskOverlay, ProductMaskPanel } from "@/components/dashboard/product-mask-panel";
 import { makeId } from "@/lib/utils";
@@ -43,6 +50,7 @@ import { buildLibraryMaterialRecommendation, materialLibraryItems, type Material
 import type { AmazonListingImage } from "@/lib/amazon-images";
 import { tableLampDimensions, tableLampMaterials, tableLampParts, tableLampStructure } from "@/lib/table-lamp-spec";
 import { lightingKnowledgeBase } from "@/lib/lighting-knowledge-base";
+import { amazonMarketingTemplates } from "@/lib/marketing-studio";
 import {
   createImageReference,
   describeIdentityMaterials,
@@ -55,6 +63,13 @@ import type {
   EngineeringDrawingView,
   EngineeringExplodedPart,
   MaterialRecommendation,
+  MarketingAsset,
+  MarketingAutoLayout,
+  MarketingCopy,
+  MarketingCopyMode,
+  MarketingEditorLayer,
+  MarketingLanguage,
+  MarketingLayerIcon,
   ProductAnalysis,
   ProductIdentity,
   ProductMaskRegion,
@@ -87,6 +102,9 @@ const menuItems = [
   { id: "lighting", label: "灯光效果", icon: SunMedium },
   { id: "scene", label: "场景生成", icon: Camera },
   { id: "amazon", label: "Amazon图片", icon: FileImage },
+  { id: "marketing-copy", label: "图片文案编辑", icon: TextCursorInput },
+  { id: "marketing-layout", label: "图片排版", icon: LayoutTemplate },
+  { id: "listing", label: "Listing优化", icon: ShoppingCart },
   { id: "packaging", label: "包装设计", icon: Package },
   { id: "drawing", label: "工程图", icon: PenTool },
   { id: "exploded", label: "爆炸图", icon: Boxes }
@@ -120,7 +138,18 @@ const materialFamilies = [
 ];
 const finishes = ["乳白半透", "拉丝金属", "抛光石材", "透明染色", "柔和哑光", "细腻纹理", "缎面阳极氧化", "温润天然", "高光点缀"];
 
-type LoadingTask = "analyze" | "design" | "product-design" | "color-edit" | "engineering" | "amazon-images" | "material" | "save" | null;
+type LoadingTask =
+  | "analyze"
+  | "design"
+  | "product-design"
+  | "color-edit"
+  | "engineering"
+  | "amazon-images"
+  | "marketing-copy"
+  | "marketing-layout"
+  | "material"
+  | "save"
+  | null;
 
 type UploadAnalysisDetails = {
   productType: string;
@@ -167,6 +196,13 @@ export function ProductStudioApp() {
   const [designVersions, setDesignVersions] = useState<DesignVersion[]>([]);
   const [selectedDesignVersionId, setSelectedDesignVersionId] = useState<string | null>(null);
   const [restoredVersion, setRestoredVersion] = useState<DesignVersion | null>(null);
+  const [marketingCopyMode, setMarketingCopyMode] = useState<MarketingCopyMode>("amazon-conversion");
+  const [marketingLanguage, setMarketingLanguage] = useState<MarketingLanguage>("en");
+  const [marketingCopy, setMarketingCopy] = useState<MarketingCopy | null>(null);
+  const [marketingLayouts, setMarketingLayouts] = useState<MarketingAutoLayout[]>([]);
+  const [selectedMarketingLayoutId, setSelectedMarketingLayoutId] = useState<string | null>(null);
+  const [selectedMarketingLayerId, setSelectedMarketingLayerId] = useState<string | null>(null);
+  const [marketingAssets, setMarketingAssets] = useState<MarketingAsset[]>([]);
 
   useEffect(() => {
     setProjects(loadSavedProjects());
@@ -203,6 +239,14 @@ export function ProductStudioApp() {
     () => productIdentity?.maskRegions.find((region) => region.id === selectedMaskRegionId) ?? null,
     [productIdentity, selectedMaskRegionId]
   );
+  const selectedMarketingLayout = useMemo(
+    () => marketingLayouts.find((layout) => layout.id === selectedMarketingLayoutId) ?? null,
+    [marketingLayouts, selectedMarketingLayoutId]
+  );
+  const selectedMarketingLayer = useMemo(
+    () => selectedMarketingLayout?.layers.find((layer) => layer.id === selectedMarketingLayerId) ?? null,
+    [selectedMarketingLayerId, selectedMarketingLayout]
+  );
 
   const progress = useMemo(() => {
     return [
@@ -213,9 +257,11 @@ export function ProductStudioApp() {
       { label: "颜色", done: colorDesignResults.length > 0 },
       { label: "材质", done: Boolean(material || appliedLibraryMaterial) },
       { label: "工程", done: engineeringViews.length === 4 },
-      { label: "Amazon", done: amazonImages.length === 9 }
+      { label: "Amazon", done: amazonImages.length === 9 },
+      { label: "文案", done: Boolean(marketingCopy) },
+      { label: "排版", done: marketingLayouts.length === 9 }
     ];
-  }, [amazonImages.length, analysis, appliedLibraryMaterial, colorDesignResults.length, concepts.length, engineeringViews.length, material, product]);
+  }, [amazonImages.length, analysis, appliedLibraryMaterial, colorDesignResults.length, concepts.length, engineeringViews.length, marketingCopy, marketingLayouts.length, material, product]);
 
   const uploadAnalysisDetails = useMemo(
     () => buildUploadAnalysisDetails(product, analysis, material),
@@ -273,6 +319,11 @@ export function ProductStudioApp() {
       setDesignVersions([]);
       setSelectedDesignVersionId(null);
       setRestoredVersion(null);
+      setMarketingCopy(null);
+      setMarketingLayouts([]);
+      setSelectedMarketingLayoutId(null);
+      setSelectedMarketingLayerId(null);
+      setMarketingAssets([]);
       setLastSavedAt(null);
       setActiveTool("ai-analysis");
       void analyzeProduct(nextProduct);
@@ -314,6 +365,10 @@ export function ProductStudioApp() {
       setAnalysis(data.analysis);
       setSelectedMaskRegionId(data.analysis.productIdentity.maskRegions.find((region) => region.id === "base")?.id ?? data.analysis.productIdentity.maskRegions[0]?.id ?? null);
       setUploadError(null);
+      await generateMarketingCopyForIdentity(data.analysis.productIdentity, data.analysis.designLock, {
+        productDisplayName: targetProduct.name,
+        switchTool: false
+      });
     } finally {
       setLoading(null);
     }
@@ -528,6 +583,205 @@ export function ProductStudioApp() {
     }
   }
 
+  async function generateMarketingCopyForIdentity(
+    targetIdentity: ProductIdentity,
+    targetDesignLock: DesignLock,
+    options: {
+      productDisplayName?: string;
+      switchTool?: boolean;
+      mode?: MarketingCopyMode;
+      language?: MarketingLanguage;
+    } = {}
+  ) {
+    setLoading("marketing-copy");
+    if (options.switchTool) {
+      setActiveTool("marketing-copy");
+    }
+
+    const mode = options.mode ?? marketingCopyMode;
+    const language = options.language ?? marketingLanguage;
+
+    try {
+      const response = await fetch("/api/ai/marketing-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName: options.productDisplayName ?? productName,
+          productIdentity: targetIdentity,
+          designLock: targetDesignLock,
+          mode,
+          language
+        })
+      });
+
+      if (!response.ok) {
+        const error = (await response.json().catch(() => null)) as { message?: string } | null;
+        setUploadError(error?.message ?? "Marketing copy requires Product Identity and Design Lock.");
+        return null;
+      }
+
+      const data = (await response.json()) as { copy: MarketingCopy };
+      setMarketingCopy(data.copy);
+      setMarketingCopyMode(data.copy.mode);
+      setMarketingLanguage(data.copy.language);
+      return data.copy;
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleGenerateMarketingCopy() {
+    if (!productIdentity || !designLock) return;
+
+    await generateMarketingCopyForIdentity(productIdentity, designLock, {
+      switchTool: true,
+      mode: marketingCopyMode,
+      language: marketingLanguage
+    });
+  }
+
+  async function handleGenerateMarketingLayouts() {
+    if (!product || !productIdentity || !designLock) return;
+
+    const copy =
+      marketingCopy ??
+      (await generateMarketingCopyForIdentity(productIdentity, designLock, {
+        productDisplayName: productName,
+        switchTool: false,
+        mode: marketingCopyMode,
+        language: marketingLanguage
+      }));
+
+    if (!copy) return;
+
+    setLoading("marketing-layout");
+    setActiveTool("marketing-layout");
+
+    try {
+      const response = await fetch("/api/ai/marketing-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName,
+          productIdentity,
+          designLock,
+          copy,
+          mode: marketingCopyMode,
+          language: marketingLanguage
+        })
+      });
+
+      if (!response.ok) {
+        const error = (await response.json().catch(() => null)) as { message?: string } | null;
+        setUploadError(error?.message ?? "Marketing auto layout requires original reference.");
+        return;
+      }
+
+      const data = (await response.json()) as {
+        layouts: MarketingAutoLayout[];
+        marketingAssets: MarketingAsset[];
+      };
+      setMarketingLayouts(data.layouts);
+      setMarketingAssets(data.marketingAssets);
+      setSelectedMarketingLayoutId(data.layouts[0]?.id ?? null);
+      setSelectedMarketingLayerId(data.layouts[0]?.layers[0]?.id ?? null);
+      addDesignVersion({
+        kind: "marketing-layout",
+        prompt: "AI Marketing Image Studio Auto Layout / Amazon 9 Images",
+        resultTitle: data.layouts[0]?.templateName ?? "Marketing Layout",
+        resultImageUrl: data.layouts[0]?.imageUrl ?? product.imageUrl,
+        resultPreviewUrl: data.layouts[0]?.layoutPreviewUrl,
+        resultCount: data.layouts.length,
+        targetRegion: productIdentity.maskRegions.find((region) => region.id === "scene") ?? null
+      });
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  function handleSelectMarketingLayout(layoutId: string) {
+    const layout = marketingLayouts.find((item) => item.id === layoutId);
+    setSelectedMarketingLayoutId(layoutId);
+    setSelectedMarketingLayerId(layout?.layers[0]?.id ?? null);
+    setActiveTool("marketing-layout");
+  }
+
+  function handleUpdateMarketingLayer(layerId: string, patch: Partial<MarketingEditorLayer>) {
+    setMarketingLayouts((current) =>
+      current.map((layout) =>
+        layout.id === selectedMarketingLayoutId
+          ? {
+              ...layout,
+              layers: layout.layers.map((layer) => (layer.id === layerId ? { ...layer, ...patch } : layer))
+            }
+          : layout
+      )
+    );
+  }
+
+  function handleAddMarketingTextLayer() {
+    if (!selectedMarketingLayout) return;
+
+    const layer: MarketingEditorLayer = {
+      id: makeId("layer"),
+      type: "text",
+      text: marketingCopy?.imageCopy[0] ?? "New Selling Point",
+      x: 8,
+      y: 14,
+      width: 46,
+      fontSize: 34,
+      fontFamily: "Inter",
+      fontWeight: "800",
+      color: "#111827",
+      opacity: 1,
+      align: "left"
+    };
+    appendMarketingLayer(layer);
+  }
+
+  function handleAddMarketingIconLayer(icon: MarketingLayerIcon) {
+    if (!selectedMarketingLayout) return;
+
+    const layer: MarketingEditorLayer = {
+      id: makeId("layer"),
+      type: "icon",
+      icon,
+      text: "Feature",
+      x: 8,
+      y: 72,
+      width: 24,
+      fontSize: 18,
+      fontFamily: "Inter",
+      fontWeight: "700",
+      color: "#111827",
+      opacity: 0.95,
+      align: "center"
+    };
+    appendMarketingLayer(layer);
+  }
+
+  function appendMarketingLayer(layer: MarketingEditorLayer) {
+    setMarketingLayouts((current) =>
+      current.map((layout) =>
+        layout.id === selectedMarketingLayoutId ? { ...layout, layers: [...layout.layers, layer] } : layout
+      )
+    );
+    setSelectedMarketingLayerId(layer.id);
+  }
+
+  function handleDeleteMarketingLayer() {
+    if (!selectedMarketingLayout || !selectedMarketingLayerId) return;
+
+    setMarketingLayouts((current) =>
+      current.map((layout) =>
+        layout.id === selectedMarketingLayout.id
+          ? { ...layout, layers: layout.layers.filter((layer) => layer.id !== selectedMarketingLayerId) }
+          : layout
+      )
+    );
+    setSelectedMarketingLayerId(null);
+  }
+
   async function handleModifyMaterial() {
     if (!product || !selectedConceptId || !productIdentity || !designLock) return;
 
@@ -645,9 +899,37 @@ export function ProductStudioApp() {
     } else if (version.kind === "engineering") {
       setActiveTool("drawing");
       setBottomTab("drawing");
+    } else if (version.kind === "marketing-layout") {
+      setActiveTool("marketing-layout");
     } else {
       setActiveTool("material");
     }
+  }
+
+  function buildMarketingAssetsForSave() {
+    if (!product || !productIdentity || !designLock || marketingLayouts.length === 0) {
+      return marketingAssets;
+    }
+
+    return marketingLayouts.map((layout, index) => {
+      const existing = marketingAssets.find((asset) => asset.layout.id === layout.id);
+      const template = amazonMarketingTemplates.find((item) => item.id === layout.templateId) ?? amazonMarketingTemplates[0];
+
+      return {
+        id: existing?.id ?? makeId("marketing-asset"),
+        productId: product.id,
+        imageId: layout.imageId,
+        copyText: layout.layers.map((layer) => layer.text).filter(Boolean).join(" | "),
+        template,
+        version: existing?.version ?? buildVersionLabel(index),
+        language: layout.language,
+        layout,
+        original_reference: productIdentity.imageReference,
+        product_identity: productIdentity,
+        design_lock: designLock,
+        createdAt: existing?.createdAt ?? new Date().toISOString()
+      };
+    });
   }
 
   function buildProject(status: SavedProject["status"]): SavedProject | null {
@@ -670,6 +952,9 @@ export function ProductStudioApp() {
       engineeringViews,
       engineeringParts,
       designVersions,
+      marketingCopy,
+      marketingAssets: buildMarketingAssetsForSave(),
+      marketingTemplates: amazonMarketingTemplates,
       savedAt: new Date().toISOString(),
       status
     };
@@ -722,6 +1007,13 @@ export function ProductStudioApp() {
     setDesignVersions(project.designVersions ?? []);
     setSelectedDesignVersionId(project.designVersions?.[0]?.id ?? null);
     setRestoredVersion(null);
+    setMarketingCopy(project.marketingCopy ?? null);
+    setMarketingLayouts(project.marketingAssets?.map((asset) => asset.layout) ?? []);
+    setMarketingAssets(project.marketingAssets ?? []);
+    setSelectedMarketingLayoutId(project.marketingAssets?.[0]?.layout.id ?? null);
+    setSelectedMarketingLayerId(project.marketingAssets?.[0]?.layout.layers[0]?.id ?? null);
+    setMarketingCopyMode(project.marketingCopy?.mode ?? "amazon-conversion");
+    setMarketingLanguage(project.marketingCopy?.language ?? "en");
     setSelectedMaskRegionId(project.analysis?.productIdentity.maskRegions.find((region) => region.id === "base")?.id ?? project.analysis?.productIdentity.maskRegions[0]?.id ?? null);
     setLastSavedAt(project.savedAt);
     setActiveTool("ai-design");
@@ -763,7 +1055,11 @@ export function ProductStudioApp() {
           appliedLibraryMaterial={appliedLibraryMaterial}
           selectedAmazonImage={selectedAmazonImage}
           selectedEngineeringView={selectedEngineeringView}
+          selectedMarketingLayout={selectedMarketingLayout}
+          selectedMarketingLayerId={selectedMarketingLayerId}
           onSelectMaskRegion={setSelectedMaskRegionId}
+          onSelectMarketingLayer={setSelectedMarketingLayerId}
+          onUpdateMarketingLayer={handleUpdateMarketingLayer}
           onUpload={() => fileInputRef.current?.click()}
         />
 
@@ -800,6 +1096,12 @@ export function ProductStudioApp() {
           lastSavedAt={lastSavedAt}
           designVersions={designVersions}
           selectedDesignVersionId={selectedDesignVersionId}
+          marketingCopy={marketingCopy}
+          marketingCopyMode={marketingCopyMode}
+          marketingLanguage={marketingLanguage}
+          marketingLayouts={marketingLayouts}
+          selectedMarketingLayoutId={selectedMarketingLayoutId}
+          selectedMarketingLayer={selectedMarketingLayer}
           onProductNameChange={setProductName}
           onCategoryChange={setCategory}
           onAnalyze={handleAnalyze}
@@ -847,6 +1149,19 @@ export function ProductStudioApp() {
           onSave={handleSave}
           onSelectDesignVersion={setSelectedDesignVersionId}
           onRestoreDesignVersion={handleRestoreVersion}
+          onMarketingCopyModeChange={setMarketingCopyMode}
+          onMarketingLanguageChange={setMarketingLanguage}
+          onGenerateMarketingCopy={handleGenerateMarketingCopy}
+          onGenerateMarketingLayouts={handleGenerateMarketingLayouts}
+          onSelectMarketingLayout={handleSelectMarketingLayout}
+          onAddMarketingTextLayer={handleAddMarketingTextLayer}
+          onAddMarketingIconLayer={handleAddMarketingIconLayer}
+          onUpdateSelectedMarketingLayer={(patch) => {
+            if (selectedMarketingLayerId) {
+              handleUpdateMarketingLayer(selectedMarketingLayerId, patch);
+            }
+          }}
+          onDeleteMarketingLayer={handleDeleteMarketingLayer}
           onOpenProject={handleOpenProject}
           onUpload={() => fileInputRef.current?.click()}
         />
@@ -990,7 +1305,11 @@ function ProductCanvas({
   appliedLibraryMaterial,
   selectedAmazonImage,
   selectedEngineeringView,
+  selectedMarketingLayout,
+  selectedMarketingLayerId,
   onSelectMaskRegion,
+  onSelectMarketingLayer,
+  onUpdateMarketingLayer,
   onUpload
 }: {
   product: UploadedProduct | null;
@@ -1009,10 +1328,15 @@ function ProductCanvas({
   appliedLibraryMaterial: MaterialLibraryItem | null;
   selectedAmazonImage: AmazonListingImage | null;
   selectedEngineeringView: EngineeringDrawingView | null;
+  selectedMarketingLayout: MarketingAutoLayout | null;
+  selectedMarketingLayerId: string | null;
   onSelectMaskRegion: (regionId: ProductMaskRegionId) => void;
+  onSelectMarketingLayer: (layerId: string | null) => void;
+  onUpdateMarketingLayer: (layerId: string, patch: Partial<MarketingEditorLayer>) => void;
   onUpload: () => void;
 }) {
   const activeLabel = menuItems.find((item) => item.id === activeTool)?.label ?? "AI设计";
+  const marketingToolActive = ["marketing-copy", "marketing-layout", "listing"].includes(activeTool);
   const renderVariant = selectedColorVariant ?? selectedDesignVariant;
   const lockedMaterialRenderUrl = appliedLibraryMaterial ? productIdentity?.imageReference.imageUrl ?? appliedLibraryMaterial.productRenderUrl : undefined;
   const renderImageUrl = restoredVersion?.resultImageUrl ?? selectedEngineeringView?.imageUrl ?? selectedAmazonImage?.imageUrl ?? lockedMaterialRenderUrl ?? renderVariant?.imageUrl;
@@ -1061,7 +1385,7 @@ function ProductCanvas({
 
         <div className="absolute right-4 top-4 z-10 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-right">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">当前选择</p>
-          <p className="mt-1 text-xs font-semibold text-zinc-200">{selectedEngineeringView?.title ?? selectedConcept?.title ?? "产品主体"}</p>
+          <p className="mt-1 text-xs font-semibold text-zinc-200">{selectedMarketingLayout?.templateName ?? selectedEngineeringView?.title ?? selectedConcept?.title ?? "产品主体"}</p>
           {selectedEngineeringView ? <p className="mt-1 text-[11px] font-semibold text-cyan-100">{selectedEngineeringView.scale}</p> : null}
         </div>
 
@@ -1072,6 +1396,14 @@ function ProductCanvas({
           {product ? (
             <div className={`relative w-full ${selectedEngineeringView ? "max-w-[620px]" : "max-w-[680px]"}`}>
               <div className="absolute -inset-8 border border-cyan-400/10 bg-black/20 shadow-[0_0_90px_rgba(34,211,238,0.08)]" />
+              {marketingToolActive && selectedMarketingLayout ? (
+                <MarketingImageEditor
+                  layout={selectedMarketingLayout}
+                  selectedLayerId={selectedMarketingLayerId}
+                  onSelectLayer={onSelectMarketingLayer}
+                  onUpdateLayer={onUpdateMarketingLayer}
+                />
+              ) : (
               <div className="relative mx-auto aspect-[4/3] overflow-hidden rounded-md border border-white/10 bg-[#17191d] shadow-[0_30px_120px_rgba(0,0,0,0.55)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -1127,6 +1459,7 @@ function ProductCanvas({
                   </div>
                 ) : null}
               </div>
+              )}
               <div className="mt-4 grid gap-3 md:grid-cols-4">
                 <AnalysisMetric label="产品类型" value={uploadAnalysisDetails.productType} />
                 <AnalysisMetric label="结构" value={uploadAnalysisDetails.structure} />
@@ -1202,6 +1535,12 @@ function AIAssistantPanel({
   lastSavedAt,
   designVersions,
   selectedDesignVersionId,
+  marketingCopy,
+  marketingCopyMode,
+  marketingLanguage,
+  marketingLayouts,
+  selectedMarketingLayoutId,
+  selectedMarketingLayer,
   onProductNameChange,
   onCategoryChange,
   onAnalyze,
@@ -1225,6 +1564,15 @@ function AIAssistantPanel({
   onSave,
   onSelectDesignVersion,
   onRestoreDesignVersion,
+  onMarketingCopyModeChange,
+  onMarketingLanguageChange,
+  onGenerateMarketingCopy,
+  onGenerateMarketingLayouts,
+  onSelectMarketingLayout,
+  onAddMarketingTextLayer,
+  onAddMarketingIconLayer,
+  onUpdateSelectedMarketingLayer,
+  onDeleteMarketingLayer,
   onOpenProject,
   onUpload
 }: {
@@ -1260,6 +1608,12 @@ function AIAssistantPanel({
   lastSavedAt: string | null;
   designVersions: DesignVersion[];
   selectedDesignVersionId: string | null;
+  marketingCopy: MarketingCopy | null;
+  marketingCopyMode: MarketingCopyMode;
+  marketingLanguage: MarketingLanguage;
+  marketingLayouts: MarketingAutoLayout[];
+  selectedMarketingLayoutId: string | null;
+  selectedMarketingLayer: MarketingEditorLayer | null;
   onProductNameChange: (name: string) => void;
   onCategoryChange: (category: string) => void;
   onAnalyze: () => void;
@@ -1283,6 +1637,15 @@ function AIAssistantPanel({
   onSave: () => void;
   onSelectDesignVersion: (versionId: string) => void;
   onRestoreDesignVersion: (versionId: string) => void;
+  onMarketingCopyModeChange: (mode: MarketingCopyMode) => void;
+  onMarketingLanguageChange: (language: MarketingLanguage) => void;
+  onGenerateMarketingCopy: () => void;
+  onGenerateMarketingLayouts: () => void;
+  onSelectMarketingLayout: (layoutId: string) => void;
+  onAddMarketingTextLayer: () => void;
+  onAddMarketingIconLayer: (icon: MarketingLayerIcon) => void;
+  onUpdateSelectedMarketingLayer: (patch: Partial<MarketingEditorLayer>) => void;
+  onDeleteMarketingLayer: () => void;
   onOpenProject: (project: SavedProject) => void;
   onUpload: () => void;
 }) {
@@ -1765,6 +2128,60 @@ function AIAssistantPanel({
                 })}
               </div>
             ) : null}
+          </PanelBlock>
+
+          <PanelBlock title="AI Marketing Image Studio">
+            <MarketingCopyPanel
+              copy={marketingCopy}
+              mode={marketingCopyMode}
+              language={marketingLanguage}
+              loading={loading === "marketing-copy"}
+              disabled={!productIdentity || !designLock}
+              onModeChange={onMarketingCopyModeChange}
+              onLanguageChange={onMarketingLanguageChange}
+              onGenerate={onGenerateMarketingCopy}
+            />
+          </PanelBlock>
+
+          <PanelBlock title="Amazon图片模板库">
+            <MarketingTemplateLibrary
+              templates={amazonMarketingTemplates}
+              layouts={marketingLayouts}
+              selectedLayoutId={selectedMarketingLayoutId}
+              loading={loading === "marketing-layout"}
+              disabled={!productIdentity || !designLock}
+              onGenerateLayouts={onGenerateMarketingLayouts}
+              onSelectLayout={onSelectMarketingLayout}
+            />
+          </PanelBlock>
+
+          <PanelBlock title="图片文字编辑器">
+            <MarketingLayerInspector
+              selectedLayer={selectedMarketingLayer}
+              disabled={marketingLayouts.length === 0}
+              onAddText={onAddMarketingTextLayer}
+              onAddIcon={onAddMarketingIconLayer}
+              onUpdateLayer={onUpdateSelectedMarketingLayer}
+              onDeleteLayer={onDeleteMarketingLayer}
+            />
+          </PanelBlock>
+
+          <PanelBlock title="Listing优化">
+            {marketingCopy ? (
+              <div className="space-y-2">
+                <AnalysisRow label="Amazon Title" value={marketingCopy.title} />
+                <AnalysisRow label="Conversion Mode" value={marketingCopyMode} />
+                <AnalysisRow label="Language" value={marketingLanguage.toUpperCase()} />
+                <div className="rounded-md border border-emerald-400/20 bg-emerald-400/10 p-3">
+                  <p className="text-xs font-bold text-emerald-100">Reference-first Listing</p>
+                  <p className="mt-2 text-[11px] leading-5 text-zinc-300">
+                    original_reference、product_identity、design_lock 已绑定到 MarketingAssets 表；图片文字由程序图层渲染，不写入AI生成图片。
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <EmptyPanel icon={ShoppingCart} label="等待生成 Listing 文案" />
+            )}
           </PanelBlock>
 
           <PanelBlock title="材质替换">

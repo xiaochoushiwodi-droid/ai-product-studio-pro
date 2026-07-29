@@ -10,6 +10,9 @@ export type HighResDesignVariant = {
   referenceImageUrl?: string;
   productIdentityId?: string;
   designLockApplied?: boolean;
+  original_reference?: ProductIdentity["imageReference"];
+  product_identity?: ProductIdentity;
+  design_lock?: DesignLock;
   targetRegion?: string;
   generatedPrompt?: string;
   allowedEdits?: string[];
@@ -87,6 +90,9 @@ export function buildProductDesignResponse(
     prompt,
     imageReferenceMode: "enabled",
     referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+    original_reference: context.productIdentity.imageReference,
+    product_identity: context.productIdentity,
+    design_lock: context.designLock,
     productIdentity: context.productIdentity,
     designLock: context.designLock,
     targetRegion: context.targetRegion,
@@ -109,6 +115,9 @@ export function buildProductDesignResponse(
       imageUrl: context.productIdentity.imageReference.imageUrl,
       materialPreviewUrl: variant.imageUrl,
       referenceImageUrl: context.productIdentity.imageReference.imageUrl,
+      original_reference: context.productIdentity.imageReference,
+      product_identity: context.productIdentity,
+      design_lock: context.designLock,
       productIdentityId: context.productIdentity.id,
       designLockApplied: true,
       targetRegion: context.targetRegion?.label ?? "Base",
