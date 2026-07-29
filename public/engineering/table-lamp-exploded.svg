@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" role="img" aria-label="Table lamp exploded engineering drawing">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#1f3b45" stroke-width="1" opacity="0.45"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#68e8ff"/>
+    </marker>
+    <style>
+      .bg{fill:#090b0f}.grid{fill:url(#grid)}.line{fill:none;stroke:#d7fbff;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.thin{fill:none;stroke:#68e8ff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.dash{fill:none;stroke:#68e8ff;stroke-width:2;stroke-dasharray:14 12}.dim{fill:none;stroke:#68e8ff;stroke-width:3;marker-start:url(#arrow);marker-end:url(#arrow)}.label{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#e8fbff;font-size:34px;font-weight:700}.small{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#9ecbd3;font-size:24px;font-weight:700}.micro{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#70e5ff;font-size:20px;font-weight:700;letter-spacing:1px}.num{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#090b0f;font-size:22px;font-weight:900}.fillGlass{fill:#dffaff;fill-opacity:.08}.fillStone{fill:#d7fbff;fill-opacity:.04}.fillMetal{fill:#68e8ff;fill-opacity:.14}.dot{fill:#68e8ff}
+    </style>
+  </defs>
+  <rect class="bg" width="1600" height="1200"/>
+  <rect class="grid" width="1600" height="1200"/>
+  <text x="90" y="105" class="micro">工程尺寸图 / 爆炸图</text>
+  <text x="90" y="150" class="label">自动拆解装配</text>
+  <text x="90" y="188" class="small">玻璃灯罩 / 金属环 / LED光源 / 电池 / 大理石底座</text>
+
+  <line x1="760" y1="215" x2="760" y2="985" class="dash"/>
+  <path d="M565 205C602 175 918 175 955 205L905 365C870 390 650 390 615 365Z" class="fillGlass"/>
+  <path d="M565 205C602 175 918 175 955 205L905 365C870 390 650 390 615 365Z" class="line"/>
+  <ellipse cx="760" cy="205" rx="195" ry="34" class="thin"/>
+  <circle cx="430" cy="285" r="22" class="dot"/>
+  <text x="423" y="293" class="num">1</text>
+  <text x="470" y="275" class="small">玻璃灯罩</text>
+  <text x="470" y="310" class="small">17cm 透光外壳</text>
+  <line x1="650" y1="430" x2="870" y2="430" class="dim"/>
+
+  <path d="M620 488H900V545H620Z" class="fillMetal"/>
+  <path d="M620 488H900V545H620Z" class="line"/>
+  <circle cx="430" cy="520" r="22" class="dot"/>
+  <text x="423" y="528" class="num">2</text>
+  <text x="470" y="510" class="small">金属环</text>
+  <text x="470" y="545" class="small">固定环与 LED 座</text>
+  <line x1="760" y1="392" x2="760" y2="480" class="dim"/>
+
+  <rect x="680" y="620" width="160" height="54" rx="10" class="fillMetal"/>
+  <rect x="680" y="620" width="160" height="54" rx="10" class="line"/>
+  <circle cx="430" cy="655" r="22" class="dot"/>
+  <text x="423" y="663" class="num">3</text>
+  <text x="470" y="645" class="small">LED光源</text>
+  <text x="470" y="680" class="small">居中发光模组</text>
+  <line x1="760" y1="552" x2="760" y2="612" class="dim"/>
+
+  <path d="M688 742H832V848H688Z" class="dash"/>
+  <text x="704" y="805" class="small">电池</text>
+  <circle cx="430" cy="805" r="22" class="dot"/>
+  <text x="423" y="813" class="num">4</text>
+  <text x="470" y="795" class="small">电池</text>
+  <text x="470" y="830" class="small">隐藏供电模块</text>
+  <line x1="760" y1="682" x2="760" y2="735" class="dim"/>
+
+  <path d="M590 955C630 915 890 915 930 955V1050C900 1080 620 1080 590 1050Z" class="fillStone"/>
+  <path d="M590 955C630 915 890 915 930 955V1050C900 1080 620 1080 590 1050Z" class="line"/>
+  <ellipse cx="760" cy="955" rx="170" ry="42" class="thin"/>
+  <circle cx="430" cy="1010" r="22" class="dot"/>
+  <text x="423" y="1018" class="num">5</text>
+  <text x="470" y="1000" class="small">大理石底座</text>
+  <text x="470" y="1035" class="small">8cm 加重石材底座</text>
+  <line x1="760" y1="856" x2="760" y2="905" class="dim"/>
+
+  <text x="1045" y="310" class="label">自动拆件</text>
+  <text x="1045" y="365" class="small">1. 玻璃灯罩</text>
+  <text x="1045" y="415" class="small">2. 金属环</text>
+  <text x="1045" y="465" class="small">3. LED光源</text>
+  <text x="1045" y="515" class="small">4. 电池</text>
+  <text x="1045" y="565" class="small">5. 大理石底座</text>
+  <line x1="1045" y1="620" x2="1370" y2="620" class="thin"/>
+  <text x="1045" y="675" class="small">锁定比例：总高 23cm</text>
+  <text x="1045" y="725" class="small">灯罩：17cm</text>
+  <text x="1045" y="775" class="small">底座：8cm</text>
+</svg>

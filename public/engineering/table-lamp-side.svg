@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" role="img" aria-label="Table lamp side engineering dimension drawing">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#1f3b45" stroke-width="1" opacity="0.45"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#68e8ff"/>
+    </marker>
+    <style>
+      .bg{fill:#090b0f}.grid{fill:url(#grid)}.line{fill:none;stroke:#d7fbff;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.thin{fill:none;stroke:#68e8ff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.dash{fill:none;stroke:#68e8ff;stroke-width:2;stroke-dasharray:14 12}.dim{fill:none;stroke:#68e8ff;stroke-width:3;marker-start:url(#arrow);marker-end:url(#arrow)}.label{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#e8fbff;font-size:34px;font-weight:700}.small{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#9ecbd3;font-size:24px;font-weight:700}.micro{font-family:"Microsoft YaHei","SimHei",Arial,Helvetica,sans-serif;fill:#70e5ff;font-size:20px;font-weight:700;letter-spacing:1px}.fillGlass{fill:#dffaff;fill-opacity:.08}.fillStone{fill:#d7fbff;fill-opacity:.04}.fillMetal{fill:#68e8ff;fill-opacity:.14}
+    </style>
+  </defs>
+  <rect class="bg" width="1600" height="1200"/>
+  <rect class="grid" width="1600" height="1200"/>
+  <text x="90" y="105" class="micro">工程尺寸图 / 侧视图</text>
+  <text x="90" y="150" class="label">台灯</text>
+  <text x="90" y="188" class="small">侧面轮廓 / 隐藏 LED 与电池堆叠</text>
+
+  <line x1="800" y1="185" x2="800" y2="940" class="dash"/>
+  <path d="M700 235C728 205 872 205 900 235L875 495C850 520 750 520 725 495Z" class="fillGlass"/>
+  <path d="M700 235C728 205 872 205 900 235L875 495C850 520 750 520 725 495Z" class="line"/>
+  <ellipse cx="800" cy="235" rx="100" ry="30" class="thin"/>
+  <path d="M710 535H890V590H710Z" class="fillMetal"/>
+  <path d="M710 535H890V590H710Z" class="line"/>
+  <rect x="744" y="606" width="112" height="42" rx="8" class="fillMetal"/>
+  <rect x="744" y="606" width="112" height="42" rx="8" class="thin"/>
+  <text x="758" y="635" class="small">LED</text>
+  <path d="M750 666H850V778H750Z" class="dash"/>
+  <path d="M675 802C700 765 900 765 925 802V895C900 925 700 925 675 895Z" class="fillStone"/>
+  <path d="M675 802C700 765 900 765 925 802V895C900 925 700 925 675 895Z" class="line"/>
+  <ellipse cx="800" cy="802" rx="125" ry="38" class="thin"/>
+
+  <line x1="545" y1="235" x2="545" y2="895" class="dim"/>
+  <line x1="575" y1="235" x2="700" y2="235" class="thin"/>
+  <line x1="575" y1="895" x2="675" y2="895" class="thin"/>
+  <text x="400" y="580" class="label" transform="rotate(-90 400 580)">总高 23cm</text>
+
+  <line x1="675" y1="970" x2="925" y2="970" class="dim"/>
+  <line x1="675" y1="925" x2="675" y2="990" class="thin"/>
+  <line x1="925" y1="925" x2="925" y2="990" class="thin"/>
+  <text x="702" y="1032" class="label">底座 8cm</text>
+
+  <text x="1035" y="300" class="small">玻璃轮廓</text>
+  <line x1="1005" y1="310" x2="882" y2="360" class="thin"/>
+  <text x="1035" y="570" class="small">金属环座</text>
+  <line x1="1005" y1="562" x2="890" y2="562" class="thin"/>
+  <text x="1035" y="655" class="small">LED 间隙</text>
+  <line x1="1005" y1="647" x2="856" y2="626" class="thin"/>
+  <text x="1035" y="750" class="small">电池仓</text>
+  <line x1="1005" y1="742" x2="850" y2="715" class="thin"/>
+  <text x="1035" y="860" class="small">石材稳定配重</text>
+  <line x1="1005" y1="852" x2="925" y2="820" class="thin"/>
+</svg>
