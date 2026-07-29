@@ -1,6 +1,6 @@
 import { tableLampParts } from "@/lib/table-lamp-spec";
 import { buildReferenceGenerationPolicy } from "@/lib/image-reference-workflow";
-import type { DesignLock, ProductIdentity } from "@/types/product";
+import type { DesignLock, ProductIdentity, ProductMaskRegion, ReferenceGenerationPrompt } from "@/types/product";
 
 export type HighResColorVariant = {
   id: string;
@@ -10,6 +10,8 @@ export type HighResColorVariant = {
   referenceImageUrl?: string;
   productIdentityId?: string;
   designLockApplied?: boolean;
+  targetRegion?: string;
+  generatedPrompt?: string;
   allowedEdits?: string[];
   lockSummary?: string;
   resolution: string;
@@ -69,6 +71,8 @@ export function buildColorEditResponse(
   context: {
     productIdentity: ProductIdentity;
     designLock: DesignLock;
+    targetRegion?: ProductMaskRegion | null;
+    referencePrompt: ReferenceGenerationPrompt;
   }
 ) {
   const policy = buildReferenceGenerationPolicy(context.productIdentity, context.designLock);
@@ -79,6 +83,8 @@ export function buildColorEditResponse(
     referenceImageUrl: context.productIdentity.imageReference.imageUrl,
     productIdentity: context.productIdentity,
     designLock: context.designLock,
+    targetRegion: context.targetRegion,
+    referencePrompt: context.referencePrompt,
     generationPolicy: policy,
     constraints: [
       "Image Reference 模式：必须使用上传图片作为唯一产品参考",
@@ -99,6 +105,8 @@ export function buildColorEditResponse(
       referenceImageUrl: context.productIdentity.imageReference.imageUrl,
       productIdentityId: context.productIdentity.id,
       designLockApplied: true,
+      targetRegion: context.targetRegion?.label ?? "Shade",
+      generatedPrompt: context.referencePrompt.systemPrompt,
       allowedEdits: ["颜色", "表面工艺"],
       lockSummary: "轮廓、比例、零件位置和摄影角度沿用上传图片；仅修改玻璃灯罩颜色与透明质感。"
     }))

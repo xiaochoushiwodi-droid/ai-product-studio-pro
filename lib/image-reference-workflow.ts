@@ -1,6 +1,6 @@
-import { tableLampDimensions, tableLampMaterials, tableLampParts, tableLampStructure } from "@/lib/table-lamp-spec";
+import { tableLampDimensions } from "@/lib/table-lamp-spec";
 import { makeId } from "@/lib/utils";
-import type { DesignLock, ImageReference, ProductIdentity, UploadedProduct } from "@/types/product";
+import type { DesignLock, ImageReference, ProductIdentity, ProductMaskRegion, UploadedProduct } from "@/types/product";
 
 export const allowedReferenceEdits = ["材质", "颜色", "表面工艺", "使用场景"] as const;
 
@@ -44,9 +44,73 @@ export function hasStrictDesignLock(designLock: DesignLock | undefined | null): 
       designLock.productOutline === "locked" &&
       designLock.sizeProportion === "locked" &&
       designLock.partPositions === "locked" &&
-      designLock.cameraAngle === "locked"
+      designLock.cameraAngle === "locked" &&
+      designLock.overallDimensions === "locked"
   );
 }
+
+export const tableLampMaskRegions: ProductMaskRegion[] = [
+  {
+    id: "shade",
+    label: "Shade",
+    partName: "Shade",
+    material: "Glass",
+    editableProperties: ["材质", "颜色", "表面工艺"],
+    lockedNeighbors: ["Metal Frame", "Base", "Light Source"],
+    promptHint: "Only edit the lamp shade. Preserve base, metal frame, light source, product proportion, and camera angle.",
+    bounds: { x: 30, y: 10, width: 40, height: 34 }
+  },
+  {
+    id: "metal",
+    label: "Metal",
+    partName: "Metal Frame",
+    material: "Metal",
+    editableProperties: ["材质", "颜色", "表面工艺"],
+    lockedNeighbors: ["Shade", "Base", "Light Source"],
+    promptHint: "Only edit the metal frame finish. Preserve shade, base, light source, silhouette, and camera angle.",
+    bounds: { x: 39, y: 43, width: 22, height: 13 }
+  },
+  {
+    id: "base",
+    label: "Base",
+    partName: "Base",
+    material: "Marble",
+    editableProperties: ["材质", "颜色", "表面工艺"],
+    lockedNeighbors: ["Shade", "Metal Frame", "Light Source"],
+    promptHint: "Only edit the base material, color, or finish. Preserve shade, metal frame, light source, product proportion, and camera angle.",
+    bounds: { x: 36, y: 72, width: 28, height: 18 }
+  },
+  {
+    id: "logo",
+    label: "Logo",
+    partName: "Logo",
+    material: "Graphic mark",
+    editableProperties: ["颜色", "表面工艺"],
+    lockedNeighbors: ["Shade", "Metal Frame", "Base", "Light Source"],
+    promptHint: "Only edit a small logo or brand mark if visible. Do not add a logo when none exists.",
+    bounds: { x: 44, y: 78, width: 12, height: 6 }
+  },
+  {
+    id: "light-source",
+    label: "Light Source",
+    partName: "Light Source",
+    material: "LED",
+    editableProperties: ["颜色"],
+    lockedNeighbors: ["Shade", "Metal Frame", "Base"],
+    promptHint: "Only tune visible light color or glow. Preserve component position, shade geometry, and base material.",
+    bounds: { x: 43, y: 39, width: 14, height: 10 }
+  },
+  {
+    id: "scene",
+    label: "Scene",
+    partName: "Scene Background",
+    material: "Environment",
+    editableProperties: ["使用场景"],
+    lockedNeighbors: ["Shade", "Metal Frame", "Base", "Light Source"],
+    promptHint: "Only change environment or background. Preserve the full product exactly as uploaded.",
+    bounds: { x: 0, y: 0, width: 100, height: 100 }
+  }
+];
 
 export function buildProductIdentityFromVision(input: {
   productName: string;
@@ -60,14 +124,12 @@ export function buildProductIdentityFromVision(input: {
     return {
       id: makeId("identity"),
       sourceProductId: input.imageReference.sourceProductId,
-      productType: "台灯",
-      partStructure: [...tableLampParts],
+      productType: "Table Lamp",
+      partStructure: ["Shade", "Metal Frame", "Base", "Light Source"],
       materials: [
-        { part: "玻璃灯罩", material: "Glass", editableProperties: ["颜色", "表面工艺"] },
-        { part: "金属环", material: "Metal", editableProperties: ["材质", "颜色", "表面工艺"] },
-        { part: "LED光源", material: "LED模组", editableProperties: [] },
-        { part: "电池", material: "Battery", editableProperties: [] },
-        { part: "大理石底座", material: "Stone", editableProperties: ["材质", "颜色", "表面工艺"] }
+        { part: "Shade", material: "Glass", editableProperties: ["材质", "颜色", "表面工艺"] },
+        { part: "Metal Frame", material: "Metal", editableProperties: ["材质", "颜色", "表面工艺"] },
+        { part: "Base", material: "Marble", editableProperties: ["材质", "颜色", "表面工艺"] }
       ],
       proportions: {
         overall: `保持上传图片中的台灯竖向轮廓；总高 ${tableLampDimensions.heightCm}cm，灯罩 ${tableLampDimensions.shadeCm}cm，底座 ${tableLampDimensions.baseCm}cm。`,
@@ -80,19 +142,20 @@ export function buildProductIdentityFromVision(input: {
         ]
       },
       keyFeatures: [
-        "顶部透明或半透明玻璃灯罩",
-        "灯罩下方金属环连接线",
-        "中心隐藏 LED 光源",
-        "底座内部电池结构",
-        "底部石材加重底座"
+        "Shape",
+        "Proportion",
+        "Silhouette",
+        "Camera Angle"
       ],
       editableAreas: [
-        "玻璃灯罩颜色",
-        "玻璃灯罩透明度与光泽",
-        "金属环表面工艺",
-        "大理石底座材质与纹理",
-        "使用场景背景"
+        "Shade",
+        "Metal Frame",
+        "Base",
+        "Logo",
+        "Light Source",
+        "Scene Background"
       ],
+      maskRegions: tableLampMaskRegions,
       imageReference: input.imageReference,
       visionModel: {
         name: "Reference Vision Analyzer v1",
@@ -123,6 +186,18 @@ export function buildProductIdentityFromVision(input: {
     },
     keyFeatures: ["上传图片中的外轮廓", "可见功能部件", "部件连接关系", "原始拍摄角度"],
     editableAreas: ["材质", "颜色", "表面工艺", "使用场景"],
+    maskRegions: [
+      {
+        id: "scene",
+        label: "Scene",
+        partName: "Scene Background",
+        material: "Environment",
+        editableProperties: ["使用场景"],
+        lockedNeighbors: ["Original product"],
+        promptHint: "Only change the scene background. Preserve uploaded product exactly.",
+        bounds: { x: 0, y: 0, width: 100, height: 100 }
+      }
+    ],
     imageReference: input.imageReference,
     visionModel: {
       name: "Reference Vision Analyzer v1",
@@ -139,11 +214,13 @@ export function buildStrictDesignLock(): DesignLock {
     sizeProportion: "locked",
     partPositions: "locked",
     cameraAngle: "locked",
+    overallDimensions: "locked",
     allowedEdits: [...allowedReferenceEdits],
     forbiddenChanges: [
       "禁止重新创造产品",
       "禁止改变产品轮廓",
       "禁止改变尺寸比例",
+      "禁止改变整体尺寸",
       "禁止移动、增加或删除零件",
       "禁止改变摄影角度",
       "禁止把上传产品替换成同类随机产品"
@@ -162,7 +239,8 @@ export function buildReferenceGenerationPolicy(identity: ProductIdentity, design
       "产品轮廓",
       "尺寸比例",
       "零件位置",
-      "摄影角度"
+      "摄影角度",
+      "整体尺寸"
     ],
     allowedEdits: designLock.allowedEdits,
     forbiddenChanges: designLock.forbiddenChanges,
@@ -195,6 +273,14 @@ export function toProductIdentityPreview(identity: ProductIdentity) {
     proportions: identity.proportions,
     keyFeatures: identity.keyFeatures,
     editableAreas: identity.editableAreas,
+    maskRegions: identity.maskRegions.map((region) => ({
+      id: region.id,
+      label: region.label,
+      partName: region.partName,
+      material: region.material,
+      editableProperties: region.editableProperties,
+      lockedNeighbors: region.lockedNeighbors
+    })),
     imageReference: {
       mode: identity.imageReference.mode,
       fileName: identity.imageReference.fileName,
@@ -206,17 +292,21 @@ export function toProductIdentityPreview(identity: ProductIdentity) {
 }
 
 export function describeIdentityMaterials(identity: ProductIdentity) {
-  if (identity.productType === "台灯") {
-    return tableLampMaterials;
+  if (isTableLampIdentity(identity)) {
+    return "Glass / Metal / Marble";
   }
 
   return identity.materials.map((item) => `${item.part}: ${item.material}`).join(" / ");
 }
 
 export function describeIdentityStructure(identity: ProductIdentity) {
-  if (identity.productType === "台灯") {
-    return tableLampStructure;
+  if (isTableLampIdentity(identity)) {
+    return "Shade / Metal Frame / Base / Light Source";
   }
 
   return identity.partStructure.join(" / ");
+}
+
+export function isTableLampIdentity(identity: ProductIdentity) {
+  return identity.productType === "Table Lamp" || identity.productType === "台灯";
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildMaterialRecommendation, simulateLatency } from "@/lib/mock-ai";
-import { createMissingReferenceError, hasStrictDesignLock, hasValidProductIdentity } from "@/lib/image-reference-workflow";
-import type { DesignLock, ProductIdentity } from "@/types/product";
+import { validateReferenceGenerationRequest } from "@/lib/design-lock-guard";
+import type { DesignLock, ProductIdentity, ProductMaskRegionId } from "@/types/product";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
@@ -10,14 +10,24 @@ export async function POST(request: Request) {
     finish?: string;
     productIdentity?: ProductIdentity;
     designLock?: DesignLock;
+    targetRegionId?: ProductMaskRegionId;
   };
 
   if (!body.conceptId) {
     return NextResponse.json({ error: "Concept is required" }, { status: 400 });
   }
 
-  if (!hasValidProductIdentity(body.productIdentity) || !hasStrictDesignLock(body.designLock)) {
-    return NextResponse.json(createMissingReferenceError("材质替换"), { status: 400 });
+  const prompt = `Apply ${body.materialFamily || "material"} with ${body.finish || "surface finish"} to the selected product region.`;
+  const validation = validateReferenceGenerationRequest({
+    action: "材质替换",
+    prompt,
+    productIdentity: body.productIdentity,
+    designLock: body.designLock,
+    targetRegionId: body.targetRegionId ?? "base"
+  });
+
+  if (!validation.ok) {
+    return NextResponse.json(validation.error, { status: validation.status });
   }
 
   await simulateLatency(650);

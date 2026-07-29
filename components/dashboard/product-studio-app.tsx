@@ -30,6 +30,11 @@ import {
   Wand2
 } from "lucide-react";
 import { LoginCard } from "@/components/auth/login-card";
+import { DesignLockPanel } from "@/components/dashboard/design-lock-panel";
+import { DesignVersionHistory } from "@/components/dashboard/design-version-history";
+import { LightingKnowledgePanel } from "@/components/dashboard/lighting-knowledge-panel";
+import { ProductIdentityPanel } from "@/components/dashboard/product-identity-panel";
+import { ProductMaskOverlay, ProductMaskPanel } from "@/components/dashboard/product-mask-panel";
 import { makeId } from "@/lib/utils";
 import { loadSavedProjects, saveProject } from "@/lib/storage";
 import type { HighResDesignVariant } from "@/lib/product-design";
@@ -37,6 +42,7 @@ import type { HighResColorVariant } from "@/lib/color-design";
 import { buildLibraryMaterialRecommendation, materialLibraryItems, type MaterialLibraryItem } from "@/lib/material-library";
 import type { AmazonListingImage } from "@/lib/amazon-images";
 import { tableLampDimensions, tableLampMaterials, tableLampParts, tableLampStructure } from "@/lib/table-lamp-spec";
+import { lightingKnowledgeBase } from "@/lib/lighting-knowledge-base";
 import {
   createImageReference,
   describeIdentityMaterials,
@@ -51,6 +57,10 @@ import type {
   MaterialRecommendation,
   ProductAnalysis,
   ProductIdentity,
+  ProductMaskRegion,
+  ProductMaskRegionId,
+  DesignVersion,
+  DesignVersionKind,
   SavedProject,
   SellerSession,
   UploadedProduct
@@ -153,6 +163,10 @@ export function ProductStudioApp() {
   const [engineeringViews, setEngineeringViews] = useState<EngineeringDrawingView[]>([]);
   const [engineeringParts, setEngineeringParts] = useState<EngineeringExplodedPart[]>([]);
   const [selectedEngineeringViewId, setSelectedEngineeringViewId] = useState<string | null>(null);
+  const [selectedMaskRegionId, setSelectedMaskRegionId] = useState<ProductMaskRegionId | null>(null);
+  const [designVersions, setDesignVersions] = useState<DesignVersion[]>([]);
+  const [selectedDesignVersionId, setSelectedDesignVersionId] = useState<string | null>(null);
+  const [restoredVersion, setRestoredVersion] = useState<DesignVersion | null>(null);
 
   useEffect(() => {
     setProjects(loadSavedProjects());
@@ -185,6 +199,10 @@ export function ProductStudioApp() {
 
   const productIdentity = analysis?.productIdentity ?? null;
   const designLock = analysis?.designLock ?? null;
+  const selectedMaskRegion = useMemo(
+    () => productIdentity?.maskRegions.find((region) => region.id === selectedMaskRegionId) ?? null,
+    [productIdentity, selectedMaskRegionId]
+  );
 
   const progress = useMemo(() => {
     return [
@@ -251,6 +269,10 @@ export function ProductStudioApp() {
       setEngineeringViews([]);
       setEngineeringParts([]);
       setSelectedEngineeringViewId(null);
+      setSelectedMaskRegionId(null);
+      setDesignVersions([]);
+      setSelectedDesignVersionId(null);
+      setRestoredVersion(null);
       setLastSavedAt(null);
       setActiveTool("ai-analysis");
       void analyzeProduct(nextProduct);
@@ -290,6 +312,7 @@ export function ProductStudioApp() {
       }
       const data = (await response.json()) as { analysis: ProductAnalysis };
       setAnalysis(data.analysis);
+      setSelectedMaskRegionId(data.analysis.productIdentity.maskRegions.find((region) => region.id === "base")?.id ?? data.analysis.productIdentity.maskRegions[0]?.id ?? null);
       setUploadError(null);
     } finally {
       setLoading(null);
@@ -324,7 +347,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateProductDesigns() {
-    if (!productIdentity || !designLock) return;
+    if (!product || !productIdentity || !designLock) return;
 
     setLoading("product-design");
     setActiveTool("ai-design");
@@ -338,6 +361,7 @@ export function ProductStudioApp() {
           prompt: designPrompt,
           productIdentity,
           designLock,
+          targetRegionId: selectedMaskRegionId ?? "base",
           constraints: {
             keepProportion: true,
             keepStructure: true,
@@ -348,6 +372,15 @@ export function ProductStudioApp() {
       });
       const data = (await response.json()) as { variants: HighResDesignVariant[] };
       setProductDesignResults(data.variants);
+      addDesignVersion({
+        kind: "product-design",
+        prompt: designPrompt,
+        resultTitle: data.variants[0]?.title ?? "AI产品设计",
+        resultImageUrl: data.variants[0]?.imageUrl ?? product.imageUrl,
+        resultPreviewUrl: data.variants[0]?.materialPreviewUrl,
+        resultCount: data.variants.length,
+        targetRegion: selectedMaskRegion
+      });
       setSelectedDesignVariantId(data.variants[0]?.id ?? null);
       setSelectedColorVariantId(null);
       setAppliedLibraryMaterial(null);
@@ -361,7 +394,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateColorDesigns() {
-    if (!productIdentity || !designLock) return;
+    if (!product || !productIdentity || !designLock) return;
 
     setLoading("color-edit");
     setActiveTool("color");
@@ -375,6 +408,7 @@ export function ProductStudioApp() {
           prompt: colorPrompt,
           productIdentity,
           designLock,
+          targetRegionId: "shade",
           constraints: {
             keepProportion: true,
             keepStructure: true,
@@ -385,6 +419,16 @@ export function ProductStudioApp() {
       });
       const data = (await response.json()) as { variants: HighResColorVariant[] };
       setColorDesignResults(data.variants);
+      const shadeRegion = productIdentity.maskRegions.find((region) => region.id === "shade") ?? selectedMaskRegion;
+      addDesignVersion({
+        kind: "color-edit",
+        prompt: colorPrompt,
+        resultTitle: data.variants[0]?.title ?? "颜色编辑",
+        resultImageUrl: data.variants[0]?.imageUrl ?? product.imageUrl,
+        resultPreviewUrl: data.variants[0]?.colorPreviewUrl,
+        resultCount: data.variants.length,
+        targetRegion: shadeRegion
+      });
       setSelectedColorVariantId(data.variants[0]?.id ?? null);
       setSelectedDesignVariantId(null);
       setAppliedLibraryMaterial(null);
@@ -397,7 +441,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateEngineeringDrawings() {
-    if (!productIdentity || !designLock) return;
+    if (!product || !productIdentity || !designLock) return;
 
     setLoading("engineering");
     setActiveTool("drawing");
@@ -411,6 +455,7 @@ export function ProductStudioApp() {
           productName,
           productIdentity,
           designLock,
+          targetRegionId: selectedMaskRegionId ?? undefined,
           dimensions: tableLampDimensions,
           components: tableLampParts
         })
@@ -421,6 +466,14 @@ export function ProductStudioApp() {
       };
       setEngineeringViews(data.views);
       setEngineeringParts(data.autoExplodedParts);
+      addDesignVersion({
+        kind: "engineering",
+        prompt: "生成正视图、侧视图、顶视图和爆炸图",
+        resultTitle: data.views[0]?.title ?? "工程尺寸图",
+        resultImageUrl: data.views[0]?.imageUrl ?? product.imageUrl,
+        resultCount: data.views.length,
+        targetRegion: selectedMaskRegion
+      });
       setSelectedEngineeringViewId(data.views[0]?.id ?? null);
       setSelectedAmazonImageId(null);
       setSelectedDesignVariantId(null);
@@ -432,7 +485,7 @@ export function ProductStudioApp() {
   }
 
   async function handleGenerateAmazonImages() {
-    if (!productIdentity || !designLock) return;
+    if (!product || !productIdentity || !designLock) return;
 
     setLoading("amazon-images");
     setActiveTool("amazon");
@@ -448,12 +501,23 @@ export function ProductStudioApp() {
           marketplace: session?.marketplace ?? "US",
           productIdentity,
           designLock,
+          targetRegionId: "scene",
           resolution: "1600 x 1600",
           imageCount: 9
         })
       });
       const data = (await response.json()) as { images: AmazonListingImage[] };
       setAmazonImages(data.images);
+      const sceneRegion = productIdentity.maskRegions.find((region) => region.id === "scene") ?? null;
+      addDesignVersion({
+        kind: "amazon-images",
+        prompt: "生成 Amazon 9 张图片，产品100%一致，只改变背景、场景和卖点信息",
+        resultTitle: data.images[0]?.title ?? "Amazon图片",
+        resultImageUrl: data.images[0]?.imageUrl ?? product.imageUrl,
+        resultPreviewUrl: data.images[0]?.layoutPreviewUrl,
+        resultCount: data.images.length,
+        targetRegion: sceneRegion
+      });
       setSelectedAmazonImageId(data.images[0]?.id ?? null);
       setSelectedDesignVariantId(null);
       setSelectedColorVariantId(null);
@@ -465,7 +529,7 @@ export function ProductStudioApp() {
   }
 
   async function handleModifyMaterial() {
-    if (!selectedConceptId || !productIdentity || !designLock) return;
+    if (!product || !selectedConceptId || !productIdentity || !designLock) return;
 
     setLoading("material");
 
@@ -478,11 +542,20 @@ export function ProductStudioApp() {
           materialFamily,
           finish,
           productIdentity,
-          designLock
+          designLock,
+          targetRegionId: selectedMaskRegionId ?? "base"
         })
       });
       const data = (await response.json()) as { recommendation: MaterialRecommendation };
       setMaterial(data.recommendation);
+      addDesignVersion({
+        kind: "material-edit",
+        prompt: `${selectedMaskRegion?.label ?? "Base"} / ${materialFamily} / ${finish}`,
+        resultTitle: data.recommendation.materialFamily,
+        resultImageUrl: product.imageUrl,
+        resultCount: 1,
+        targetRegion: selectedMaskRegion
+      });
       setAppliedLibraryMaterial(null);
       setSelectedAmazonImageId(null);
       setSelectedEngineeringViewId(null);
@@ -493,10 +566,22 @@ export function ProductStudioApp() {
   }
 
   function handleApplyLibraryMaterial(item: MaterialLibraryItem) {
-    if (!productIdentity || !designLock) return;
+    if (!product || !productIdentity || !designLock) return;
+
+    const libraryTargetRegionId: ProductMaskRegionId = item.category === "Glass" ? "shade" : "base";
+    const libraryTargetRegion = productIdentity.maskRegions.find((region) => region.id === libraryTargetRegionId) ?? selectedMaskRegion;
 
     setAppliedLibraryMaterial(item);
     setMaterial(buildLibraryMaterialRecommendation(item));
+    addDesignVersion({
+      kind: "material-library",
+      prompt: `Apply ${item.name} to ${item.targetPart}`,
+      resultTitle: item.name,
+      resultImageUrl: product.imageUrl,
+      resultPreviewUrl: item.productRenderUrl,
+      resultCount: 1,
+      targetRegion: libraryTargetRegion
+    });
     setMaterialFamily(item.name);
     setFinish(item.gloss.label);
     setSelectedDesignVariantId(null);
@@ -504,6 +589,65 @@ export function ProductStudioApp() {
     setSelectedAmazonImageId(null);
     setSelectedEngineeringViewId(null);
     setActiveTool("material-library");
+  }
+
+  function addDesignVersion(input: {
+    kind: DesignVersionKind;
+    prompt: string;
+    resultTitle: string;
+    resultImageUrl: string;
+    resultPreviewUrl?: string;
+    resultCount?: number;
+    targetRegion: ProductMaskRegion | null;
+  }) {
+    if (!product || !productIdentity || !designLock) return;
+
+    const version: DesignVersion = {
+      id: makeId("version"),
+      label: buildVersionLabel(designVersions.length),
+      kind: input.kind,
+      createdAt: new Date().toISOString(),
+      originalImageUrl: product.imageUrl,
+      prompt: input.prompt,
+      targetRegion: input.targetRegion,
+      productIdentity,
+      designLock,
+      resultTitle: input.resultTitle,
+      resultImageUrl: input.resultImageUrl,
+      resultPreviewUrl: input.resultPreviewUrl,
+      resultCount: input.resultCount
+    };
+
+    setDesignVersions((current) => [version, ...current].slice(0, 12));
+    setSelectedDesignVersionId(version.id);
+    setRestoredVersion(null);
+  }
+
+  function handleRestoreVersion(versionId: string) {
+    const version = designVersions.find((item) => item.id === versionId);
+    if (!version) return;
+
+    setSelectedDesignVersionId(version.id);
+    setRestoredVersion(version);
+    setSelectedMaskRegionId(version.targetRegion?.id ?? selectedMaskRegionId);
+
+    if (version.kind === "product-design") {
+      setActiveTool("ai-design");
+      setSelectedAmazonImageId(null);
+      setSelectedEngineeringViewId(null);
+    } else if (version.kind === "color-edit") {
+      setActiveTool("color");
+      setSelectedAmazonImageId(null);
+      setSelectedEngineeringViewId(null);
+    } else if (version.kind === "amazon-images") {
+      setActiveTool("amazon");
+      setBottomTab("amazon");
+    } else if (version.kind === "engineering") {
+      setActiveTool("drawing");
+      setBottomTab("drawing");
+    } else {
+      setActiveTool("material");
+    }
   }
 
   function buildProject(status: SavedProject["status"]): SavedProject | null {
@@ -525,6 +669,7 @@ export function ProductStudioApp() {
       material,
       engineeringViews,
       engineeringParts,
+      designVersions,
       savedAt: new Date().toISOString(),
       status
     };
@@ -574,6 +719,10 @@ export function ProductStudioApp() {
     setEngineeringViews(project.engineeringViews ?? []);
     setEngineeringParts(project.engineeringParts ?? []);
     setSelectedEngineeringViewId(project.engineeringViews?.[0]?.id ?? null);
+    setDesignVersions(project.designVersions ?? []);
+    setSelectedDesignVersionId(project.designVersions?.[0]?.id ?? null);
+    setRestoredVersion(null);
+    setSelectedMaskRegionId(project.analysis?.productIdentity.maskRegions.find((region) => region.id === "base")?.id ?? project.analysis?.productIdentity.maskRegions[0]?.id ?? null);
     setLastSavedAt(project.savedAt);
     setActiveTool("ai-design");
   }
@@ -604,6 +753,8 @@ export function ProductStudioApp() {
           progress={progress}
           productIdentity={productIdentity}
           designLock={designLock}
+          selectedMaskRegionId={selectedMaskRegionId}
+          restoredVersion={restoredVersion}
           material={material}
           selectedConcept={selectedConcept}
           uploadAnalysisDetails={uploadAnalysisDetails}
@@ -612,6 +763,7 @@ export function ProductStudioApp() {
           appliedLibraryMaterial={appliedLibraryMaterial}
           selectedAmazonImage={selectedAmazonImage}
           selectedEngineeringView={selectedEngineeringView}
+          onSelectMaskRegion={setSelectedMaskRegionId}
           onUpload={() => fileInputRef.current?.click()}
         />
 
@@ -623,6 +775,7 @@ export function ProductStudioApp() {
           analysis={analysis}
           productIdentity={productIdentity}
           designLock={designLock}
+          selectedMaskRegionId={selectedMaskRegionId}
           concepts={concepts}
           selectedConceptId={selectedConceptId}
           material={material}
@@ -645,6 +798,8 @@ export function ProductStudioApp() {
           uploadError={uploadError}
           uploadAnalysisDetails={uploadAnalysisDetails}
           lastSavedAt={lastSavedAt}
+          designVersions={designVersions}
+          selectedDesignVersionId={selectedDesignVersionId}
           onProductNameChange={setProductName}
           onCategoryChange={setCategory}
           onAnalyze={handleAnalyze}
@@ -685,10 +840,13 @@ export function ProductStudioApp() {
             setAppliedLibraryMaterial(null);
           }}
           onSelectConcept={setSelectedConceptId}
+          onSelectMaskRegion={setSelectedMaskRegionId}
           onMaterialFamilyChange={setMaterialFamily}
           onFinishChange={setFinish}
           onModifyMaterial={handleModifyMaterial}
           onSave={handleSave}
+          onSelectDesignVersion={setSelectedDesignVersionId}
+          onRestoreDesignVersion={handleRestoreVersion}
           onOpenProject={handleOpenProject}
           onUpload={() => fileInputRef.current?.click()}
         />
@@ -822,6 +980,8 @@ function ProductCanvas({
   progress,
   productIdentity,
   designLock,
+  selectedMaskRegionId,
+  restoredVersion,
   material,
   selectedConcept,
   uploadAnalysisDetails,
@@ -830,6 +990,7 @@ function ProductCanvas({
   appliedLibraryMaterial,
   selectedAmazonImage,
   selectedEngineeringView,
+  onSelectMaskRegion,
   onUpload
 }: {
   product: UploadedProduct | null;
@@ -838,6 +999,8 @@ function ProductCanvas({
   progress: Array<{ label: string; done: boolean }>;
   productIdentity: ProductIdentity | null;
   designLock: DesignLock | null;
+  selectedMaskRegionId: ProductMaskRegionId | null;
+  restoredVersion: DesignVersion | null;
   material: MaterialRecommendation | null;
   selectedConcept: DesignConcept | null;
   uploadAnalysisDetails: UploadAnalysisDetails;
@@ -846,13 +1009,14 @@ function ProductCanvas({
   appliedLibraryMaterial: MaterialLibraryItem | null;
   selectedAmazonImage: AmazonListingImage | null;
   selectedEngineeringView: EngineeringDrawingView | null;
+  onSelectMaskRegion: (regionId: ProductMaskRegionId) => void;
   onUpload: () => void;
 }) {
   const activeLabel = menuItems.find((item) => item.id === activeTool)?.label ?? "AI设计";
   const renderVariant = selectedColorVariant ?? selectedDesignVariant;
   const lockedMaterialRenderUrl = appliedLibraryMaterial ? productIdentity?.imageReference.imageUrl ?? appliedLibraryMaterial.productRenderUrl : undefined;
-  const renderImageUrl = selectedEngineeringView?.imageUrl ?? selectedAmazonImage?.imageUrl ?? lockedMaterialRenderUrl ?? renderVariant?.imageUrl;
-  const renderTitle = selectedEngineeringView ? `工程图 / ${selectedEngineeringView.title}` : selectedAmazonImage ? `Amazon图片 / ${selectedAmazonImage.title}` : appliedLibraryMaterial ? `材质库 / ${appliedLibraryMaterial.name}` : renderVariant?.title ?? productName;
+  const renderImageUrl = restoredVersion?.resultImageUrl ?? selectedEngineeringView?.imageUrl ?? selectedAmazonImage?.imageUrl ?? lockedMaterialRenderUrl ?? renderVariant?.imageUrl;
+  const renderTitle = restoredVersion ? `History / ${restoredVersion.label}` : selectedEngineeringView ? `工程图 / ${selectedEngineeringView.title}` : selectedAmazonImage ? `Amazon图片 / ${selectedAmazonImage.title}` : appliedLibraryMaterial ? `材质库 / ${appliedLibraryMaterial.name}` : renderVariant?.title ?? productName;
   const renderResolution = selectedEngineeringView?.resolution ?? selectedAmazonImage?.resolution ?? appliedLibraryMaterial?.resolution ?? renderVariant?.resolution;
 
   return (
@@ -915,6 +1079,13 @@ function ProductCanvas({
                   alt={renderTitle}
                   className="h-full w-full object-contain p-8"
                 />
+                {!selectedEngineeringView ? (
+                  <ProductMaskOverlay
+                    productIdentity={productIdentity}
+                    selectedRegionId={selectedMaskRegionId}
+                    onSelectRegion={onSelectMaskRegion}
+                  />
+                ) : null}
                 {!selectedEngineeringView ? (
                   <div className="absolute left-4 top-4 rounded-md border border-white/10 bg-black/50 px-3 py-2">
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">
@@ -1006,6 +1177,7 @@ function AIAssistantPanel({
   analysis,
   productIdentity,
   designLock,
+  selectedMaskRegionId,
   concepts,
   selectedConceptId,
   material,
@@ -1028,6 +1200,8 @@ function AIAssistantPanel({
   uploadError,
   uploadAnalysisDetails,
   lastSavedAt,
+  designVersions,
+  selectedDesignVersionId,
   onProductNameChange,
   onCategoryChange,
   onAnalyze,
@@ -1044,10 +1218,13 @@ function AIAssistantPanel({
   onGenerateAmazonImages,
   onSelectAmazonImage,
   onSelectConcept,
+  onSelectMaskRegion,
   onMaterialFamilyChange,
   onFinishChange,
   onModifyMaterial,
   onSave,
+  onSelectDesignVersion,
+  onRestoreDesignVersion,
   onOpenProject,
   onUpload
 }: {
@@ -1058,6 +1235,7 @@ function AIAssistantPanel({
   analysis: ProductAnalysis | null;
   productIdentity: ProductIdentity | null;
   designLock: DesignLock | null;
+  selectedMaskRegionId: ProductMaskRegionId | null;
   concepts: DesignConcept[];
   selectedConceptId: string | null;
   material: MaterialRecommendation | null;
@@ -1080,6 +1258,8 @@ function AIAssistantPanel({
   uploadError: string | null;
   uploadAnalysisDetails: UploadAnalysisDetails;
   lastSavedAt: string | null;
+  designVersions: DesignVersion[];
+  selectedDesignVersionId: string | null;
   onProductNameChange: (name: string) => void;
   onCategoryChange: (category: string) => void;
   onAnalyze: () => void;
@@ -1096,10 +1276,13 @@ function AIAssistantPanel({
   onGenerateAmazonImages: () => void;
   onSelectAmazonImage: (id: string) => void;
   onSelectConcept: (id: string) => void;
+  onSelectMaskRegion: (regionId: ProductMaskRegionId) => void;
   onMaterialFamilyChange: (value: string) => void;
   onFinishChange: (value: string) => void;
   onModifyMaterial: () => void;
   onSave: () => void;
+  onSelectDesignVersion: (versionId: string) => void;
+  onRestoreDesignVersion: (versionId: string) => void;
   onOpenProject: (project: SavedProject) => void;
   onUpload: () => void;
 }) {
@@ -1198,6 +1381,22 @@ function AIAssistantPanel({
                 </pre>
               </div>
             )}
+          </PanelBlock>
+
+          <PanelBlock title="Product Identity">
+            <ProductIdentityPanel productIdentity={productIdentity} designLock={designLock} />
+          </PanelBlock>
+
+          <PanelBlock title="Product Mask">
+            <ProductMaskPanel
+              productIdentity={productIdentity}
+              selectedRegionId={selectedMaskRegionId}
+              onSelectRegion={onSelectMaskRegion}
+            />
+          </PanelBlock>
+
+          <PanelBlock title="Design Lock">
+            <DesignLockPanel designLock={designLock} />
           </PanelBlock>
 
           <PanelBlock title="AI流程">
@@ -1624,6 +1823,19 @@ function AIAssistantPanel({
               </div>
             )}
           </PanelBlock>
+
+          <PanelBlock title="Lighting Knowledge Base">
+            <LightingKnowledgePanel rules={lightingKnowledgeBase} />
+          </PanelBlock>
+
+          <PanelBlock title="History">
+            <DesignVersionHistory
+              versions={designVersions}
+              selectedVersionId={selectedDesignVersionId}
+              onSelectVersion={onSelectDesignVersion}
+              onRestoreVersion={onRestoreDesignVersion}
+            />
+          </PanelBlock>
         </div>
 
         <div className="border-t border-white/10 p-4">
@@ -1827,6 +2039,14 @@ function isSupportedProductImage(file: File) {
   const allowedTypes = new Set(["image/jpeg", "image/png"]);
   const allowedExtensions = /\.(jpe?g|png)$/i;
   return allowedTypes.has(file.type) || allowedExtensions.test(file.name);
+}
+
+function buildVersionLabel(index: number) {
+  const alphabetIndex = index % 26;
+  const cycle = Math.floor(index / 26);
+  const letter = String.fromCharCode(65 + alphabetIndex);
+
+  return cycle === 0 ? `Version ${letter}` : `Version ${letter}${cycle + 1}`;
 }
 
 function buildUploadAnalysisDetails(
