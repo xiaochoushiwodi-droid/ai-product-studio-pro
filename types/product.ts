@@ -51,6 +51,30 @@ export type ProductIdentityMaterial = {
   editableProperties: AllowedProductEdit[];
 };
 
+export type VisionProductIdentityJson = {
+  productType: string;
+  parts: string[];
+  materials: Array<{
+    part: string;
+    material: string;
+  }>;
+  dimensions: {
+    heightCm?: number;
+    widthCm?: number;
+    depthCm?: number;
+    shadeCm?: number;
+    baseCm?: number;
+    summary: string;
+    relationships: string[];
+  };
+  editableAreas: string[];
+  designLock: {
+    locked: string[];
+    allowedEdits: string[];
+    forbiddenChanges: string[];
+  };
+};
+
 export type ProductIdentity = {
   id: string;
   sourceProductId: string;
@@ -69,6 +93,7 @@ export type ProductIdentity = {
   keyFeatures: string[];
   editableAreas: string[];
   maskRegions: ProductMaskRegion[];
+  rawVisionJson: VisionProductIdentityJson;
   imageReference: ImageReference;
   visionModel: {
     name: string;
@@ -212,6 +237,14 @@ export type ProductAnalysis = {
   imageReferenceMode: "enabled";
   productIdentity: ProductIdentity;
   designLock: DesignLock;
+  aiDebug: {
+    originalImage: "PASS" | "FAIL";
+    productIdentity: "PASS" | "FAIL";
+    designLock: "PASS" | "FAIL";
+    visionSource: "openai" | "mock-fallback";
+    visionModel: string;
+    message?: string;
+  };
   opportunityScore: number;
   targetBuyer: string;
   positioning: string;

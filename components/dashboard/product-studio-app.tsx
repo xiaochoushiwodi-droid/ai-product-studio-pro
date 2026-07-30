@@ -33,6 +33,7 @@ import {
   Wand2
 } from "lucide-react";
 import { LoginCard } from "@/components/auth/login-card";
+import { AIDebugPanel } from "@/components/dashboard/ai-debug-panel";
 import { DesignLockPanel } from "@/components/dashboard/design-lock-panel";
 import { DesignVersionHistory } from "@/components/dashboard/design-version-history";
 import { LightingKnowledgePanel } from "@/components/dashboard/lighting-knowledge-panel";
@@ -1744,6 +1745,15 @@ function AIAssistantPanel({
                 </pre>
               </div>
             )}
+          </PanelBlock>
+
+          <PanelBlock title="AI Debug">
+            <AIDebugPanel
+              product={product}
+              productIdentity={productIdentity}
+              designLock={designLock}
+              aiDebug={analysis?.aiDebug ?? null}
+            />
           </PanelBlock>
 
           <PanelBlock title="Product Identity">

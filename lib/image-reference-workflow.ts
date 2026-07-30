@@ -1,6 +1,14 @@
 import { tableLampDimensions } from "@/lib/table-lamp-spec";
 import { makeId } from "@/lib/utils";
-import type { DesignLock, ImageReference, ProductIdentity, ProductMaskRegion, UploadedProduct } from "@/types/product";
+import type {
+  DesignLock,
+  ImageReference,
+  ProductIdentity,
+  ProductIdentityMaterial,
+  ProductMaskRegion,
+  UploadedProduct,
+  VisionProductIdentityJson
+} from "@/types/product";
 
 export const allowedReferenceEdits = ["材质", "颜色", "表面工艺", "使用场景"] as const;
 
@@ -33,6 +41,12 @@ export function hasValidProductIdentity(productIdentity: ProductIdentity | undef
       productIdentity.productType &&
       Array.isArray(productIdentity.partStructure) &&
       productIdentity.partStructure.length > 0 &&
+      Array.isArray(productIdentity.materials) &&
+      productIdentity.materials.length > 0 &&
+      Array.isArray(productIdentity.editableAreas) &&
+      productIdentity.editableAreas.length > 0 &&
+      Array.isArray(productIdentity.maskRegions) &&
+      productIdentity.maskRegions.length > 0 &&
       hasValidImageReference(productIdentity.imageReference)
   );
 }
@@ -116,9 +130,44 @@ export function buildProductIdentityFromVision(input: {
   productName: string;
   category: string;
   imageReference: ImageReference;
+  visionIdentity?: VisionProductIdentityJson | null;
+  visionModelName?: string;
 }): ProductIdentity {
   const isTableLamp = input.category === "Lighting" || /table lamp|台灯/i.test(input.productName);
   const analyzedAt = new Date().toISOString();
+  const rawVisionJson = input.visionIdentity ?? buildFallbackVisionIdentityJson(input);
+  const visionModelName = input.visionModelName ?? "Reference Vision Analyzer v1";
+
+  if (input.visionIdentity) {
+    return {
+      id: makeId("identity"),
+      sourceProductId: input.imageReference.sourceProductId,
+      productType: normalizeText(rawVisionJson.productType, input.productName || input.category),
+      partStructure: normalizeParts(rawVisionJson.parts, isTableLamp),
+      materials: normalizeMaterials(rawVisionJson.materials, isTableLamp),
+      proportions: {
+        overall: rawVisionJson.dimensions.summary || "Preserve uploaded product proportions, visible component relationships, and camera perspective.",
+        dimensions: {
+          heightCm: rawVisionJson.dimensions.heightCm,
+          shadeCm: rawVisionJson.dimensions.shadeCm,
+          baseCm: rawVisionJson.dimensions.baseCm
+        },
+        relationships: rawVisionJson.dimensions.relationships.length > 0
+          ? rawVisionJson.dimensions.relationships
+          : ["Preserve visible part relationships from the uploaded image."]
+      },
+      keyFeatures: ["Shape", "Proportion", "Silhouette", "Camera Angle"],
+      editableAreas: normalizeEditableAreas(rawVisionJson.editableAreas, isTableLamp),
+      maskRegions: buildMaskRegionsFromVision(rawVisionJson, isTableLamp),
+      rawVisionJson,
+      imageReference: input.imageReference,
+      visionModel: {
+        name: visionModelName,
+        status: "completed",
+        analyzedAt
+      }
+    };
+  }
 
   if (isTableLamp) {
     return {
@@ -156,9 +205,10 @@ export function buildProductIdentityFromVision(input: {
         "Scene Background"
       ],
       maskRegions: tableLampMaskRegions,
+      rawVisionJson,
       imageReference: input.imageReference,
       visionModel: {
-        name: "Reference Vision Analyzer v1",
+        name: visionModelName,
         status: "completed",
         analyzedAt
       }
@@ -198,13 +248,136 @@ export function buildProductIdentityFromVision(input: {
         bounds: { x: 0, y: 0, width: 100, height: 100 }
       }
     ],
+    rawVisionJson,
     imageReference: input.imageReference,
     visionModel: {
-      name: "Reference Vision Analyzer v1",
+      name: visionModelName,
       status: "completed",
       analyzedAt
     }
   };
+}
+
+export function buildFallbackVisionIdentityJson(input: {
+  productName: string;
+  category: string;
+}): VisionProductIdentityJson {
+  const isTableLamp = input.category === "Lighting" || /table lamp|台灯/i.test(input.productName);
+
+  if (isTableLamp) {
+    return {
+      productType: "Table Lamp",
+      parts: ["Shade", "Metal Frame", "Base", "Light Source"],
+      materials: [
+        { part: "Shade", material: "Glass" },
+        { part: "Metal Frame", material: "Metal" },
+        { part: "Base", material: "Marble" }
+      ],
+      dimensions: {
+        heightCm: tableLampDimensions.heightCm,
+        shadeCm: tableLampDimensions.shadeCm,
+        baseCm: tableLampDimensions.baseCm,
+        summary: `Table lamp vertical proportion. Height ${tableLampDimensions.heightCm}cm, shade ${tableLampDimensions.shadeCm}cm, base ${tableLampDimensions.baseCm}cm.`,
+        relationships: [
+          "Shade is above the metal frame.",
+          "Light source remains centered under the shade.",
+          "Base remains lower, compact, and heavier than shade."
+        ]
+      },
+      editableAreas: ["Shade", "Metal Frame", "Base", "Logo", "Light Source", "Scene Background"],
+      designLock: {
+        locked: ["Product silhouette", "Product proportion", "Component position", "Camera angle", "Overall dimensions"],
+        allowedEdits: ["Material", "Color", "Surface finish", "Scene background"],
+        forbiddenChanges: ["Redesign product", "Change silhouette", "Move components", "Change camera angle"]
+      }
+    };
+  }
+
+  return {
+    productType: input.productName || input.category,
+    parts: ["Main Body", "Functional Component", "Connection Area", "Support Area"],
+    materials: [
+      { part: "Main Body", material: "Detected from uploaded image" },
+      { part: "Functional Component", material: "Detected from uploaded image" }
+    ],
+    dimensions: {
+      summary: "Preserve uploaded product proportions, visible component relationships, and camera perspective.",
+      relationships: ["Preserve visible silhouette.", "Preserve component count and relative positions."]
+    },
+    editableAreas: ["Material", "Color", "Surface Finish", "Scene Background"],
+    designLock: {
+      locked: ["Product silhouette", "Product proportion", "Component position", "Camera angle", "Overall dimensions"],
+      allowedEdits: ["Material", "Color", "Surface finish", "Scene background"],
+      forbiddenChanges: ["Redesign product", "Change silhouette", "Move components", "Change camera angle"]
+    }
+  };
+}
+
+function normalizeText(value: string | undefined, fallback: string) {
+  const text = value?.trim();
+  return text && text.length > 0 ? text : fallback;
+}
+
+function normalizeParts(parts: string[] | undefined, isTableLamp: boolean) {
+  const normalized = Array.from(new Set((parts ?? []).map((part) => part.trim()).filter(Boolean)));
+  if (normalized.length > 0) return normalized;
+  return isTableLamp ? ["Shade", "Metal Frame", "Base", "Light Source"] : ["Main Body"];
+}
+
+function normalizeMaterials(materials: VisionProductIdentityJson["materials"] | undefined, isTableLamp: boolean): ProductIdentityMaterial[] {
+  const normalized = (materials ?? [])
+    .filter((item) => item.part?.trim() && item.material?.trim())
+    .map((item) => ({
+      part: item.part.trim(),
+      material: item.material.trim(),
+      editableProperties: ["材质", "颜色", "表面工艺"] as ProductIdentityMaterial["editableProperties"]
+    }));
+
+  if (normalized.length > 0) return normalized;
+
+  return (isTableLamp
+    ? [
+        { part: "Shade", material: "Glass" },
+        { part: "Metal Frame", material: "Metal" },
+        { part: "Base", material: "Marble" }
+      ]
+    : [{ part: "Main Body", material: "Detected from uploaded image" }]
+  ).map((item) => ({
+    ...item,
+    editableProperties: ["材质", "颜色", "表面工艺"] as ProductIdentityMaterial["editableProperties"]
+  }));
+}
+
+function normalizeEditableAreas(editableAreas: string[] | undefined, isTableLamp: boolean) {
+  const normalized = Array.from(new Set((editableAreas ?? []).map((area) => area.trim()).filter(Boolean)));
+  if (normalized.length > 0) return normalized;
+  return isTableLamp ? ["Shade", "Metal Frame", "Base", "Logo", "Light Source", "Scene Background"] : ["Material", "Color", "Surface Finish", "Scene Background"];
+}
+
+function buildMaskRegionsFromVision(identity: VisionProductIdentityJson, isTableLamp: boolean): ProductMaskRegion[] {
+  if (!isTableLamp) {
+    return [
+      {
+        id: "scene" as const,
+        label: "Scene",
+        partName: "Scene Background",
+        material: "Environment",
+        editableProperties: ["使用场景"] as ProductMaskRegion["editableProperties"],
+        lockedNeighbors: ["Original product"],
+        promptHint: "Only change the scene background. Preserve uploaded product exactly.",
+        bounds: { x: 0, y: 0, width: 100, height: 100 }
+      }
+    ];
+  }
+
+  const detectedParts = new Set(identity.parts.map((part) => part.toLowerCase()));
+  const shouldKeepRegion = (region: ProductMaskRegion) => {
+    if (region.id === "scene") return true;
+    return detectedParts.size === 0 || Array.from(detectedParts).some((part) => part.includes(region.partName.toLowerCase()) || region.partName.toLowerCase().includes(part));
+  };
+
+  const regions = tableLampMaskRegions.filter(shouldKeepRegion);
+  return regions.length > 1 ? regions : tableLampMaskRegions;
 }
 
 export function buildStrictDesignLock(): DesignLock {
@@ -273,6 +446,7 @@ export function toProductIdentityPreview(identity: ProductIdentity) {
     proportions: identity.proportions,
     keyFeatures: identity.keyFeatures,
     editableAreas: identity.editableAreas,
+    rawVisionJson: identity.rawVisionJson,
     maskRegions: identity.maskRegions.map((region) => ({
       id: region.id,
       label: region.label,

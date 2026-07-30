@@ -3,7 +3,8 @@ import type {
   ImageReference,
   Marketplace,
   MaterialRecommendation,
-  ProductAnalysis
+  ProductAnalysis,
+  VisionProductIdentityJson
 } from "@/types/product";
 import { makeId } from "@/lib/utils";
 import { buildProductIdentityFromVision, buildStrictDesignLock } from "@/lib/image-reference-workflow";
@@ -96,13 +97,19 @@ export function buildProductAnalysis(input: {
   category: string;
   marketplace: Marketplace;
   imageReference: ImageReference;
+  visionIdentity?: VisionProductIdentityJson | null;
+  visionModelName?: string;
+  visionSource?: ProductAnalysis["aiDebug"]["visionSource"];
+  visionMessage?: string;
 }): ProductAnalysis {
   const signal = categorySignals[input.category] ?? categorySignals["Kitchen & Dining"];
   const score = 78 + (input.productName.length % 12);
   const productIdentity = buildProductIdentityFromVision({
     productName: input.productName,
     category: input.category,
-    imageReference: input.imageReference
+    imageReference: input.imageReference,
+    visionIdentity: input.visionIdentity,
+    visionModelName: input.visionModelName
   });
   const designLock = buildStrictDesignLock();
 
@@ -113,6 +120,14 @@ export function buildProductAnalysis(input: {
     imageReferenceMode: "enabled",
     productIdentity,
     designLock,
+    aiDebug: {
+      originalImage: productIdentity.imageReference.imageUrl ? "PASS" : "FAIL",
+      productIdentity: productIdentity.productType && productIdentity.partStructure.length > 0 ? "PASS" : "FAIL",
+      designLock: designLock.mode === "strict-reference-lock" ? "PASS" : "FAIL",
+      visionSource: input.visionSource ?? "mock-fallback",
+      visionModel: input.visionModelName ?? productIdentity.visionModel.name,
+      message: input.visionMessage
+    },
     opportunityScore: Math.min(score, 92),
     targetBuyer: signal.buyer,
     positioning: `${input.productName} 可以通过可见的品质升级、明确的 Amazon 卖点角度和易验证的材料/结构证据提升转化。`,
