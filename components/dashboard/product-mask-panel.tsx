@@ -12,8 +12,10 @@ export function ProductMaskPanel({
   if (!productIdentity) {
     return (
       <div className="rounded-md border border-white/10 bg-black/25 p-3">
-        <p className="text-xs font-bold text-zinc-200">产品区域 Mask</p>
-        <p className="mt-2 text-[11px] leading-5 text-zinc-500">完成视觉分析后自动识别 Shade、Metal、Base、Logo、Light Source。</p>
+        <p className="text-xs font-bold text-zinc-200">Product Mask Engine</p>
+        <p className="mt-2 text-[11px] leading-5 text-zinc-500">
+          上传并完成视觉分析后，TOGO AI 会自动识别 Shade、Base、Metal、LED、Battery，并生成可点击 mask。
+        </p>
       </div>
     );
   }
@@ -42,6 +44,10 @@ export function ProductMaskPanel({
                   {item}
                 </span>
               ))}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-zinc-500">
+              <span>{region.source}</span>
+              <span>{Math.round(region.confidence * 100)}% confidence</span>
             </div>
           </button>
         );
@@ -84,6 +90,7 @@ export function ProductMaskOverlay({
             title={region.promptHint}
           >
             <span className="absolute left-1 top-1 rounded bg-black/55 px-1.5 py-0.5">{region.label}</span>
+            <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1.5 py-0.5">{Math.round(region.confidence * 100)}%</span>
           </button>
         );
       })}

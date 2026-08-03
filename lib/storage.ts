@@ -2,7 +2,8 @@
 
 import type { SavedProject } from "@/types/product";
 
-const PROJECTS_KEY = "ai-product-studio-pro.projects";
+const PROJECTS_KEY = "togo-ai.projects";
+const LEGACY_PROJECTS_KEY = ["ai", "product", "studio", "pro.projects"].join("-");
 
 export function loadSavedProjects(): SavedProject[] {
   if (typeof window === "undefined") {
@@ -10,7 +11,10 @@ export function loadSavedProjects(): SavedProject[] {
   }
 
   try {
-    const value = window.localStorage.getItem(PROJECTS_KEY);
+    const value = window.localStorage.getItem(PROJECTS_KEY) ?? window.localStorage.getItem(LEGACY_PROJECTS_KEY);
+    if (value && !window.localStorage.getItem(PROJECTS_KEY)) {
+      window.localStorage.setItem(PROJECTS_KEY, value);
+    }
     return value ? (JSON.parse(value) as SavedProject[]) : [];
   } catch {
     return [];

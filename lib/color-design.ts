@@ -24,48 +24,48 @@ export type HighResColorVariant = {
   notes: string;
 };
 
-const protectedTableLampParts = tableLampParts.filter((part) => part !== "玻璃灯罩");
+const protectedTableLampParts = tableLampParts.filter((part) => part !== "Glass Shade");
 
 export const tableLampShadeColorVariants: HighResColorVariant[] = [
   {
     id: "shade-amber",
-    title: "颜色 01 / 琥珀色",
+    title: "Color 01 / Amber",
     imageUrl: "/ai-designs/table-lamp-shade-amber.png",
     resolution: "2048 x 2048",
-    shadeColor: "琥珀色",
-    changedPart: "玻璃灯罩",
-    transparency: "暖色透明玻璃",
-    notes: "暖琥珀透明灯罩，适合营造温暖家居氛围。"
+    shadeColor: "Amber",
+    changedPart: "Glass Shade",
+    transparency: "warm transparent glass",
+    notes: "Warm amber transparent shade for a softer home atmosphere."
   },
   {
     id: "shade-smoke-grey",
-    title: "颜色 02 / 烟灰色",
+    title: "Color 02 / Smoke Grey",
     imageUrl: "/ai-designs/table-lamp-shade-smoke-grey.png",
     resolution: "2048 x 2048",
-    shadeColor: "烟灰色",
-    changedPart: "玻璃灯罩",
-    transparency: "烟熏半透明玻璃",
-    notes: "烟灰透明灯罩，适合黑色高级科技风与工业风场景。"
+    shadeColor: "Smoke Grey",
+    changedPart: "Glass Shade",
+    transparency: "smoked semi-transparent glass",
+    notes: "Smoke grey shade for a sharper black-tech and industrial look."
   },
   {
     id: "shade-olive-green",
-    title: "颜色 03 / 橄榄绿",
+    title: "Color 03 / Olive Green",
     imageUrl: "/ai-designs/table-lamp-shade-olive-green.png",
     resolution: "2048 x 2048",
-    shadeColor: "橄榄绿",
-    changedPart: "玻璃灯罩",
-    transparency: "柔和绿色透明玻璃",
-    notes: "橄榄绿透明灯罩，强调自然、复古和高端家居质感。"
+    shadeColor: "Olive Green",
+    changedPart: "Glass Shade",
+    transparency: "soft green transparent glass",
+    notes: "Olive green shade for natural, vintage, and premium decor positioning."
   },
   {
     id: "shade-clear",
-    title: "颜色 04 / 透明",
+    title: "Color 04 / Clear",
     imageUrl: "/ai-designs/table-lamp-shade-clear.png",
     resolution: "2048 x 2048",
-    shadeColor: "透明",
-    changedPart: "玻璃灯罩",
-    transparency: "清透玻璃",
-    notes: "清透玻璃灯罩，保持最干净的产品主图表现。"
+    shadeColor: "Clear",
+    changedPart: "Glass Shade",
+    transparency: "clear transparent glass",
+    notes: "Clear glass shade for the cleanest main-image product expression."
   }
 ];
 
@@ -92,18 +92,22 @@ export function buildColorEditResponse(
     targetRegion: context.targetRegion,
     referencePrompt: context.referencePrompt,
     generationPolicy: policy,
+    requestContract: {
+      original_reference: context.productIdentity.imageReference,
+      product_identity: context.productIdentity.rawVisionJson,
+      design_lock: policy.design_lock,
+      prompt
+    },
     constraints: [
-      "Image Reference 模式：必须使用上传图片作为唯一产品参考",
-      "Design Lock：锁定产品轮廓、尺寸比例、零件位置、摄影角度",
-      "保持产品比例",
-      "保持结构",
-      "只修改玻璃灯罩颜色",
-      "保持玻璃透明质感",
-      "禁止重新创造产品"
+      "Image Reference mode: uploaded image is the only product reference.",
+      "Design Lock: silhouette, dimensions, structure, component positions, and camera angle are locked.",
+      "Only edit shade color, transparency, and surface finish.",
+      "Preserve glass thickness and reflections.",
+      "Never recreate or replace the product."
     ],
-    changedPart: "玻璃灯罩",
+    changedPart: context.targetRegion?.partName ?? "Glass Shade",
     protectedParts: protectedTableLampParts,
-    targetColors: ["琥珀色", "烟灰色", "橄榄绿", "透明"],
+    targetColors: ["Amber", "Smoke Grey", "Olive Green", "Clear"],
     variants: tableLampShadeColorVariants.map((variant) => ({
       ...variant,
       imageUrl: context.productIdentity.imageReference.imageUrl,
@@ -116,8 +120,8 @@ export function buildColorEditResponse(
       designLockApplied: true,
       targetRegion: context.targetRegion?.label ?? "Shade",
       generatedPrompt: context.referencePrompt.systemPrompt,
-      allowedEdits: ["颜色", "表面工艺"],
-      lockSummary: "轮廓、比例、零件位置和摄影角度沿用上传图片；仅修改玻璃灯罩颜色与透明质感。"
+      allowedEdits: ["color", "surface_finish"],
+      lockSummary: "Silhouette, proportions, component positions, and camera angle follow the uploaded product. Only shade color changes."
     }))
   };
 }

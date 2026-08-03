@@ -8,7 +8,6 @@ import {
   Camera,
   CheckCircle2,
   CircuitBoard,
-  Cuboid,
   Download,
   FileImage,
   FolderOpen,
@@ -25,6 +24,8 @@ import {
   PenTool,
   Save,
   ScanLine,
+  Settings,
+  SlidersHorizontal,
   Sparkles,
   ShoppingCart,
   SunMedium,
@@ -32,6 +33,7 @@ import {
   Upload,
   Wand2
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { LoginCard } from "@/components/auth/login-card";
 import { AIDebugPanel } from "@/components/dashboard/ai-debug-panel";
 import { DesignLockPanel } from "@/components/dashboard/design-lock-panel";
@@ -72,14 +74,18 @@ import type {
   MarketingLanguage,
   MarketingLayerIcon,
   ProductAnalysis,
+  ProductImageEditVariant,
   ProductIdentity,
   ProductMaskRegion,
   ProductMaskRegionId,
   DesignVersion,
   DesignVersionKind,
+  AIModelSettings,
+  ImageProviderName,
   SavedProject,
   SellerSession,
-  UploadedProduct
+  UploadedProduct,
+  VisionProviderName
 } from "@/types/product";
 
 const categoryOptions = [
@@ -111,6 +117,14 @@ const menuItems = [
   { id: "exploded", label: "爆炸图", icon: Boxes }
 ];
 
+const studioMenuItems = [
+  ...menuItems.slice(0, 3),
+  { id: "ai-design-studio", label: "AI Design Studio", icon: SlidersHorizontal },
+  ...menuItems.slice(3, 4),
+  { id: "ai-settings", label: "AI Settings", icon: Settings },
+  ...menuItems.slice(4)
+];
+
 const bottomModules = [
   { id: "amazon", label: "Amazon图片", icon: FileImage },
   { id: "drawing", label: "工程图", icon: CircuitBoard },
@@ -139,6 +153,18 @@ const materialFamilies = [
 ];
 const finishes = ["乳白半透", "拉丝金属", "抛光石材", "透明染色", "柔和哑光", "细腻纹理", "缎面阳极氧化", "温润天然", "高光点缀"];
 
+const visionModelOptions: Array<{ id: VisionProviderName; label: string; region: "global" | "china" }> = [
+  { id: "openai", label: "OpenAI Vision", region: "global" },
+  { id: "qwen", label: "Tongyi Qianwen VL", region: "china" },
+  { id: "zhipu", label: "Zhipu Vision", region: "china" }
+];
+
+const imageModelOptions: Array<{ id: ImageProviderName; label: string; region: "global" | "china" }> = [
+  { id: "openai-image", label: "OpenAI Image API", region: "global" },
+  { id: "qwen-wanxiang", label: "Tongyi Wanxiang", region: "china" },
+  { id: "flux", label: "Flux", region: "global" }
+];
+
 type LoadingTask =
   | "analyze"
   | "design"
@@ -146,6 +172,7 @@ type LoadingTask =
   | "color-edit"
   | "engineering"
   | "amazon-images"
+  | "image-edit"
   | "marketing-copy"
   | "marketing-layout"
   | "material"
@@ -169,6 +196,7 @@ export function ProductStudioApp() {
   const [material, setMaterial] = useState<MaterialRecommendation | null>(null);
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [cloudSaveStatus, setCloudSaveStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState<LoadingTask>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState("ai-design");
@@ -204,6 +232,22 @@ export function ProductStudioApp() {
   const [selectedMarketingLayoutId, setSelectedMarketingLayoutId] = useState<string | null>(null);
   const [selectedMarketingLayerId, setSelectedMarketingLayerId] = useState<string | null>(null);
   const [marketingAssets, setMarketingAssets] = useState<MarketingAsset[]>([]);
+  const [aiSettings, setAiSettings] = useState<AIModelSettings>({
+    region: "global",
+    visionProvider: "openai",
+    imageProvider: "openai-image"
+  });
+
+  function aiRequestHeaders() {
+    return {
+      "Content-Type": "application/json",
+      ...(session?.email ? { "x-togo-user-email": session.email } : {})
+    };
+  }
+  const [imageEditPrompt, setImageEditPrompt] = useState("Change shade material to amber glass. Keep all structure unchanged.");
+  const [imageEditResults, setImageEditResults] = useState<ProductImageEditVariant[]>([]);
+  const [selectedImageEditId, setSelectedImageEditId] = useState<string | null>(null);
+  const [imageEditError, setImageEditError] = useState<string | null>(null);
 
   useEffect(() => {
     setProjects(loadSavedProjects());
@@ -247,6 +291,10 @@ export function ProductStudioApp() {
   const selectedMarketingLayer = useMemo(
     () => selectedMarketingLayout?.layers.find((layer) => layer.id === selectedMarketingLayerId) ?? null,
     [selectedMarketingLayerId, selectedMarketingLayout]
+  );
+  const selectedImageEditVariant = useMemo(
+    () => imageEditResults.find((variant) => variant.id === selectedImageEditId) ?? null,
+    [imageEditResults, selectedImageEditId]
   );
 
   const progress = useMemo(() => {
@@ -325,6 +373,9 @@ export function ProductStudioApp() {
       setSelectedMarketingLayoutId(null);
       setSelectedMarketingLayerId(null);
       setMarketingAssets([]);
+      setImageEditResults([]);
+      setSelectedImageEditId(null);
+      setImageEditError(null);
       setLastSavedAt(null);
       setActiveTool("ai-analysis");
       void analyzeProduct(nextProduct);
@@ -347,13 +398,16 @@ export function ProductStudioApp() {
     });
 
     try {
-      const response = await fetch("/api/ai/analyze", {
+      const response = await fetch("/api/ai/analyze-product", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName: productName.trim() || targetProduct.name,
           category: targetProduct.category,
           marketplace: session.marketplace,
+          vision_provider: aiSettings.visionProvider,
+          original_image: imageReference.imageUrl,
+          original_reference: imageReference,
           imageReference
         })
       });
@@ -390,8 +444,14 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/design", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysis })
+        headers: aiRequestHeaders(),
+        body: JSON.stringify({
+          analysis,
+          prompt: "Generate AI product design concepts from the uploaded product reference.",
+          original_reference: analysis.productIdentity.imageReference,
+          product_identity: analysis.productIdentity,
+          design_lock: analysis.designLock
+        })
       });
       const data = (await response.json()) as { concepts: DesignConcept[] };
       setConcepts(data.concepts);
@@ -411,10 +471,13 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/product-design", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName,
           prompt: designPrompt,
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
           productIdentity,
           designLock,
           targetRegionId: selectedMaskRegionId ?? "base",
@@ -438,6 +501,7 @@ export function ProductStudioApp() {
         targetRegion: selectedMaskRegion
       });
       setSelectedDesignVariantId(data.variants[0]?.id ?? null);
+      setSelectedImageEditId(null);
       setSelectedColorVariantId(null);
       setAppliedLibraryMaterial(null);
       setSelectedAmazonImageId(null);
@@ -458,10 +522,13 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/color-edit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName,
           prompt: colorPrompt,
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
           productIdentity,
           designLock,
           targetRegionId: "shade",
@@ -486,11 +553,73 @@ export function ProductStudioApp() {
         targetRegion: shadeRegion
       });
       setSelectedColorVariantId(data.variants[0]?.id ?? null);
+      setSelectedImageEditId(null);
       setSelectedDesignVariantId(null);
       setAppliedLibraryMaterial(null);
       setSelectedAmazonImageId(null);
       setSelectedEngineeringViewId(null);
       setFinish("透明染色");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleEditProductImage() {
+    if (!product || !productIdentity || !designLock) return;
+
+    setLoading("image-edit");
+    setActiveTool("ai-design-studio");
+    setImageEditError(null);
+
+    try {
+      const response = await fetch("/api/ai/edit-product-image", {
+        method: "POST",
+        headers: aiRequestHeaders(),
+        body: JSON.stringify({
+          productName,
+          category,
+          prompt: imageEditPrompt,
+          original_image: productIdentity.imageReference.imageUrl,
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
+          targetRegionId: selectedMaskRegionId ?? "shade",
+          variantCount: 4,
+          vision_provider: aiSettings.visionProvider,
+          image_provider: aiSettings.imageProvider,
+          amazonMode: /amazon/i.test(imageEditPrompt)
+        })
+      });
+
+      const data = (await response.json()) as {
+        variants?: ProductImageEditVariant[];
+        error?: string;
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setImageEditError(data.message ?? data.error ?? "Image-to-image edit failed.");
+        return;
+      }
+
+      const variants = data.variants ?? [];
+      setImageEditResults(variants);
+      setSelectedImageEditId(variants[0]?.id ?? null);
+      if (variants.length > 0) {
+        addDesignVersion({
+          kind: "image-edit",
+          prompt: imageEditPrompt,
+          resultTitle: variants[0].title,
+          resultImageUrl: variants[0].imageUrl,
+          resultCount: variants.length,
+          targetRegion: selectedMaskRegion
+        });
+      }
+      setSelectedDesignVariantId(null);
+      setSelectedColorVariantId(null);
+      setAppliedLibraryMaterial(null);
+      setSelectedAmazonImageId(null);
+      setSelectedEngineeringViewId(null);
     } finally {
       setLoading(null);
     }
@@ -506,9 +635,13 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/engineering", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName,
+          prompt: "Generate front view, side view, top view, and exploded view from the uploaded product reference.",
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
           productIdentity,
           designLock,
           targetRegionId: selectedMaskRegionId ?? undefined,
@@ -531,6 +664,7 @@ export function ProductStudioApp() {
         targetRegion: selectedMaskRegion
       });
       setSelectedEngineeringViewId(data.views[0]?.id ?? null);
+      setSelectedImageEditId(null);
       setSelectedAmazonImageId(null);
       setSelectedDesignVariantId(null);
       setSelectedColorVariantId(null);
@@ -550,11 +684,15 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/amazon-images", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName,
           category,
           marketplace: session?.marketplace ?? "US",
+          prompt: "Generate Amazon 9-image set from the original product reference.",
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
           productIdentity,
           designLock,
           targetRegionId: "scene",
@@ -575,6 +713,7 @@ export function ProductStudioApp() {
         targetRegion: sceneRegion
       });
       setSelectedAmazonImageId(data.images[0]?.id ?? null);
+      setSelectedImageEditId(null);
       setSelectedDesignVariantId(null);
       setSelectedColorVariantId(null);
       setAppliedLibraryMaterial(null);
@@ -605,9 +744,13 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/marketing-copy", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName: options.productDisplayName ?? productName,
+          prompt: "Generate Amazon marketing copy from Product Identity JSON.",
+          original_reference: targetIdentity.imageReference,
+          product_identity: targetIdentity,
+          design_lock: targetDesignLock,
           productIdentity: targetIdentity,
           designLock: targetDesignLock,
           mode,
@@ -661,9 +804,13 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/marketing-layout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           productName,
+          prompt: "Auto layout Amazon marketing images using original product reference and program-rendered text overlays.",
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
           productIdentity,
           designLock,
           copy,
@@ -791,11 +938,15 @@ export function ProductStudioApp() {
     try {
       const response = await fetch("/api/ai/material", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(),
         body: JSON.stringify({
           conceptId: selectedConceptId,
           materialFamily,
           finish,
+          prompt: `Apply ${materialFamily} with ${finish} to ${selectedMaskRegion?.label ?? "Base"}.`,
+          original_reference: productIdentity.imageReference,
+          product_identity: productIdentity,
+          design_lock: designLock,
           productIdentity,
           designLock,
           targetRegionId: selectedMaskRegionId ?? "base"
@@ -827,6 +978,7 @@ export function ProductStudioApp() {
     const libraryTargetRegion = productIdentity.maskRegions.find((region) => region.id === libraryTargetRegionId) ?? selectedMaskRegion;
 
     setAppliedLibraryMaterial(item);
+    setSelectedImageEditId(null);
     setMaterial(buildLibraryMaterialRecommendation(item));
     addDesignVersion({
       kind: "material-library",
@@ -961,7 +1113,7 @@ export function ProductStudioApp() {
     };
   }
 
-  function handleSave() {
+  async function handleSave() {
     const project = buildProject(material ? "Ready for sampling" : "Draft");
     if (!project) return;
 
@@ -969,7 +1121,20 @@ export function ProductStudioApp() {
     const nextProjects = saveProject(project);
     setProjects(nextProjects);
     setLastSavedAt(project.savedAt);
-    window.setTimeout(() => setLoading(null), 350);
+
+    try {
+      const response = await fetch("/api/projects/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project })
+      });
+      const data = (await response.json().catch(() => null)) as { cloud?: { projectUrl?: string }; message?: string } | null;
+      setCloudSaveStatus(response.ok ? `Cloud saved: ${data?.cloud?.projectUrl ?? "Vercel Blob"}` : `Local saved. Cloud: ${data?.message ?? "not configured"}`);
+    } catch (error) {
+      setCloudSaveStatus(`Local saved. Cloud sync failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setLoading(null);
+    }
   }
 
   function handleExport() {
@@ -1011,6 +1176,9 @@ export function ProductStudioApp() {
     setMarketingCopy(project.marketingCopy ?? null);
     setMarketingLayouts(project.marketingAssets?.map((asset) => asset.layout) ?? []);
     setMarketingAssets(project.marketingAssets ?? []);
+    setImageEditResults([]);
+    setSelectedImageEditId(null);
+    setImageEditError(null);
     setSelectedMarketingLayoutId(project.marketingAssets?.[0]?.layout.id ?? null);
     setSelectedMarketingLayerId(project.marketingAssets?.[0]?.layout.layers[0]?.id ?? null);
     setMarketingCopyMode(project.marketingCopy?.mode ?? "amazon-conversion");
@@ -1053,6 +1221,7 @@ export function ProductStudioApp() {
           uploadAnalysisDetails={uploadAnalysisDetails}
           selectedDesignVariant={selectedDesignVariant}
           selectedColorVariant={selectedColorVariant}
+          selectedImageEditVariant={selectedImageEditVariant}
           appliedLibraryMaterial={appliedLibraryMaterial}
           selectedAmazonImage={selectedAmazonImage}
           selectedEngineeringView={selectedEngineeringView}
@@ -1095,6 +1264,7 @@ export function ProductStudioApp() {
           uploadError={uploadError}
           uploadAnalysisDetails={uploadAnalysisDetails}
           lastSavedAt={lastSavedAt}
+          cloudSaveStatus={cloudSaveStatus}
           designVersions={designVersions}
           selectedDesignVersionId={selectedDesignVersionId}
           marketingCopy={marketingCopy}
@@ -1103,6 +1273,11 @@ export function ProductStudioApp() {
           marketingLayouts={marketingLayouts}
           selectedMarketingLayoutId={selectedMarketingLayoutId}
           selectedMarketingLayer={selectedMarketingLayer}
+          aiSettings={aiSettings}
+          imageEditPrompt={imageEditPrompt}
+          imageEditResults={imageEditResults}
+          selectedImageEditId={selectedImageEditId}
+          imageEditError={imageEditError}
           onProductNameChange={setProductName}
           onCategoryChange={setCategory}
           onAnalyze={handleAnalyze}
@@ -1126,6 +1301,17 @@ export function ProductStudioApp() {
             setSelectedEngineeringViewId(null);
           }}
           onApplyLibraryMaterial={handleApplyLibraryMaterial}
+          onAISettingsChange={setAiSettings}
+          onImageEditPromptChange={setImageEditPrompt}
+          onEditProductImage={handleEditProductImage}
+          onSelectImageEditVariant={(id) => {
+            setSelectedImageEditId(id);
+            setSelectedDesignVariantId(null);
+            setSelectedColorVariantId(null);
+            setAppliedLibraryMaterial(null);
+            setSelectedAmazonImageId(null);
+            setSelectedEngineeringViewId(null);
+          }}
           onGenerateEngineeringDrawings={handleGenerateEngineeringDrawings}
           onSelectEngineeringView={(id) => {
             setSelectedEngineeringViewId(id);
@@ -1214,21 +1400,28 @@ function TopBar({
   return (
     <header className="flex h-[58px] items-center justify-between border-b border-white/10 bg-black/95 px-4">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200">
-          <Cuboid className="h-5 w-5" aria-hidden="true" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="truncate text-sm font-bold text-white">AI Product Studio Pro</h1>
-            <span className="rounded border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold text-zinc-400">
-              Amazon {session.marketplace}
-            </span>
-          </div>
+        <BrandLogo size="small" priority />
+        <div className="hidden min-w-0 items-center gap-2 md:flex">
+          <span className="rounded border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold text-zinc-400">
+            Amazon {session.marketplace}
+          </span>
           <p className="truncate text-xs text-zinc-500">{productName || "Untitled product"} / {session.sellerName}</p>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
+        <a
+          className="hidden h-9 items-center rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-zinc-300 transition hover:text-cyan-100 md:inline-flex"
+          href="/credits"
+        >
+          Credits
+        </a>
+        <a
+          className="hidden h-9 items-center rounded-md border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-zinc-300 transition hover:text-cyan-100 lg:inline-flex"
+          href="/admin"
+        >
+          Admin
+        </a>
         <button
           className="inline-flex h-9 items-center gap-2 rounded-md border border-cyan-400/35 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-45"
           type="button"
@@ -1264,7 +1457,7 @@ function LeftToolMenu({
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">设计模块</p>
       </div>
       <nav className="p-2">
-        {menuItems.map((item) => {
+        {studioMenuItems.map((item) => {
           const Icon = item.icon;
           const active = activeTool === item.id;
 
@@ -1303,6 +1496,7 @@ function ProductCanvas({
   uploadAnalysisDetails,
   selectedDesignVariant,
   selectedColorVariant,
+  selectedImageEditVariant,
   appliedLibraryMaterial,
   selectedAmazonImage,
   selectedEngineeringView,
@@ -1326,6 +1520,7 @@ function ProductCanvas({
   uploadAnalysisDetails: UploadAnalysisDetails;
   selectedDesignVariant: HighResDesignVariant | null;
   selectedColorVariant: HighResColorVariant | null;
+  selectedImageEditVariant: ProductImageEditVariant | null;
   appliedLibraryMaterial: MaterialLibraryItem | null;
   selectedAmazonImage: AmazonListingImage | null;
   selectedEngineeringView: EngineeringDrawingView | null;
@@ -1338,7 +1533,7 @@ function ProductCanvas({
 }) {
   const activeLabel = menuItems.find((item) => item.id === activeTool)?.label ?? "AI设计";
   const marketingToolActive = ["marketing-copy", "marketing-layout", "listing"].includes(activeTool);
-  const renderVariant = selectedColorVariant ?? selectedDesignVariant;
+  const renderVariant = selectedImageEditVariant ?? selectedColorVariant ?? selectedDesignVariant;
   const lockedMaterialRenderUrl = appliedLibraryMaterial ? productIdentity?.imageReference.imageUrl ?? appliedLibraryMaterial.productRenderUrl : undefined;
   const renderImageUrl = restoredVersion?.resultImageUrl ?? selectedEngineeringView?.imageUrl ?? selectedAmazonImage?.imageUrl ?? lockedMaterialRenderUrl ?? renderVariant?.imageUrl;
   const renderTitle = restoredVersion ? `History / ${restoredVersion.label}` : selectedEngineeringView ? `工程图 / ${selectedEngineeringView.title}` : selectedAmazonImage ? `Amazon图片 / ${selectedAmazonImage.title}` : appliedLibraryMaterial ? `材质库 / ${appliedLibraryMaterial.name}` : renderVariant?.title ?? productName;
@@ -1534,6 +1729,7 @@ function AIAssistantPanel({
   uploadError,
   uploadAnalysisDetails,
   lastSavedAt,
+  cloudSaveStatus,
   designVersions,
   selectedDesignVersionId,
   marketingCopy,
@@ -1542,6 +1738,11 @@ function AIAssistantPanel({
   marketingLayouts,
   selectedMarketingLayoutId,
   selectedMarketingLayer,
+  aiSettings,
+  imageEditPrompt,
+  imageEditResults,
+  selectedImageEditId,
+  imageEditError,
   onProductNameChange,
   onCategoryChange,
   onAnalyze,
@@ -1553,6 +1754,10 @@ function AIAssistantPanel({
   onGenerateColorDesigns,
   onSelectColorVariant,
   onApplyLibraryMaterial,
+  onAISettingsChange,
+  onImageEditPromptChange,
+  onEditProductImage,
+  onSelectImageEditVariant,
   onGenerateEngineeringDrawings,
   onSelectEngineeringView,
   onGenerateAmazonImages,
@@ -1607,6 +1812,7 @@ function AIAssistantPanel({
   uploadError: string | null;
   uploadAnalysisDetails: UploadAnalysisDetails;
   lastSavedAt: string | null;
+  cloudSaveStatus: string | null;
   designVersions: DesignVersion[];
   selectedDesignVersionId: string | null;
   marketingCopy: MarketingCopy | null;
@@ -1615,6 +1821,11 @@ function AIAssistantPanel({
   marketingLayouts: MarketingAutoLayout[];
   selectedMarketingLayoutId: string | null;
   selectedMarketingLayer: MarketingEditorLayer | null;
+  aiSettings: AIModelSettings;
+  imageEditPrompt: string;
+  imageEditResults: ProductImageEditVariant[];
+  selectedImageEditId: string | null;
+  imageEditError: string | null;
   onProductNameChange: (name: string) => void;
   onCategoryChange: (category: string) => void;
   onAnalyze: () => void;
@@ -1626,6 +1837,10 @@ function AIAssistantPanel({
   onGenerateColorDesigns: () => void;
   onSelectColorVariant: (id: string) => void;
   onApplyLibraryMaterial: (item: MaterialLibraryItem) => void;
+  onAISettingsChange: (settings: AIModelSettings) => void;
+  onImageEditPromptChange: (prompt: string) => void;
+  onEditProductImage: () => void;
+  onSelectImageEditVariant: (id: string) => void;
   onGenerateEngineeringDrawings: () => void;
   onSelectEngineeringView: (id: string) => void;
   onGenerateAmazonImages: () => void;
@@ -1745,6 +1960,30 @@ function AIAssistantPanel({
                 </pre>
               </div>
             )}
+          </PanelBlock>
+
+          <PanelBlock title="AI Settings">
+            <AISettingsPanel
+              settings={aiSettings}
+              onChange={onAISettingsChange}
+            />
+          </PanelBlock>
+
+          <PanelBlock title="AI Design Studio">
+            <AIDesignStudioPanel
+              product={product}
+              productIdentity={productIdentity}
+              designLock={designLock}
+              selectedMaskRegionId={selectedMaskRegionId}
+              prompt={imageEditPrompt}
+              results={imageEditResults}
+              selectedResultId={selectedImageEditId}
+              loading={loading === "image-edit"}
+              error={imageEditError}
+              onPromptChange={onImageEditPromptChange}
+              onGenerate={onEditProductImage}
+              onSelectResult={onSelectImageEditVariant}
+            />
           </PanelBlock>
 
           <PanelBlock title="AI Debug">
@@ -2276,9 +2515,205 @@ function AIAssistantPanel({
             保存项目
           </button>
           {lastSavedAt ? <p className="mt-2 text-center text-[11px] text-zinc-500">已保存 {new Date(lastSavedAt).toLocaleString()}</p> : null}
+          {cloudSaveStatus ? <p className="mt-1 text-center text-[11px] text-cyan-200">{cloudSaveStatus}</p> : null}
         </div>
       </div>
     </aside>
+  );
+}
+
+function AISettingsPanel({
+  settings,
+  onChange
+}: {
+  settings: AIModelSettings;
+  onChange: (settings: AIModelSettings) => void;
+}) {
+  const filteredVisionModels = visionModelOptions.filter((model) => settings.region === "global" ? model.region === "global" : model.region === "china");
+  const filteredImageModels = imageModelOptions.filter((model) => settings.region === "global" ? model.region === "global" : model.region === "china");
+
+  function updateRegion(region: AIModelSettings["region"]) {
+    const nextVision = visionModelOptions.find((model) => model.region === region)?.id ?? settings.visionProvider;
+    const nextImage = imageModelOptions.find((model) => model.region === region)?.id ?? settings.imageProvider;
+    onChange({
+      region,
+      visionProvider: nextVision,
+      imageProvider: nextImage
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        {(["global", "china"] as const).map((region) => (
+          <button
+            key={region}
+            className={`h-8 rounded-md border text-xs font-bold transition ${
+              settings.region === region ? "border-cyan-300/60 bg-cyan-400/10 text-cyan-100" : "border-white/10 bg-black/25 text-zinc-400 hover:bg-white/[0.06]"
+            }`}
+            type="button"
+            onClick={() => updateRegion(region)}
+          >
+            {region === "global" ? "海外模型" : "国内模型"}
+          </button>
+        ))}
+      </div>
+
+      <ModelSelect
+        label="Vision Model"
+        value={settings.visionProvider}
+        options={filteredVisionModels}
+        onChange={(value) => onChange({ ...settings, visionProvider: value as VisionProviderName })}
+      />
+      <ModelSelect
+        label="Image Model"
+        value={settings.imageProvider}
+        options={filteredImageModels}
+        onChange={(value) => onChange({ ...settings, imageProvider: value as ImageProviderName })}
+      />
+
+      <div className="rounded-md border border-white/10 bg-black/25 p-3">
+        <p className="text-xs font-bold text-zinc-100">Provider Contract</p>
+        <p className="mt-2 text-[11px] leading-5 text-zinc-500">
+          Vision analyzes the uploaded product first. Image generation must use image-to-image mode with original_reference, product_identity, design_lock, and prompt.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AIDesignStudioPanel({
+  product,
+  productIdentity,
+  designLock,
+  selectedMaskRegionId,
+  prompt,
+  results,
+  selectedResultId,
+  loading,
+  error,
+  onPromptChange,
+  onGenerate,
+  onSelectResult
+}: {
+  product: UploadedProduct | null;
+  productIdentity: ProductIdentity | null;
+  designLock: DesignLock | null;
+  selectedMaskRegionId: ProductMaskRegionId | null;
+  prompt: string;
+  results: ProductImageEditVariant[];
+  selectedResultId: string | null;
+  loading: boolean;
+  error: string | null;
+  onPromptChange: (prompt: string) => void;
+  onGenerate: () => void;
+  onSelectResult: (id: string) => void;
+}) {
+  const steps = [
+    { label: "Step 1 Upload product", done: Boolean(product) },
+    { label: "Step 2 AI analysis", done: Boolean(productIdentity && designLock) },
+    { label: "Step 3 Select region", done: Boolean(selectedMaskRegionId) },
+    { label: "Step 4 Enter instruction", done: prompt.trim().length > 0 },
+    { label: "Step 5 Generate 3-6 variants", done: results.length > 0 },
+    { label: "Step 6 Compare and select", done: Boolean(selectedResultId) }
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-1.5">
+        {steps.map((step) => (
+          <div key={step.label} className="flex items-center justify-between rounded-md border border-white/10 bg-black/25 px-3 py-2">
+            <span className="text-[11px] font-semibold text-zinc-300">{step.label}</span>
+            <span className={`text-[10px] font-black ${step.done ? "text-emerald-200" : "text-zinc-600"}`}>{step.done ? "PASS" : "WAIT"}</span>
+          </div>
+        ))}
+      </div>
+
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-semibold text-zinc-500">AI instruction</span>
+        <textarea
+          className="min-h-24 w-full resize-none rounded-md border border-white/10 bg-black/35 px-3 py-2 text-sm leading-5 text-zinc-100 outline-none transition focus:border-cyan-300/60"
+          value={prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-2 text-[11px] font-bold text-zinc-200 transition hover:bg-white/[0.1]"
+          type="button"
+          onClick={() => onPromptChange("Change shade material to amber glass. Keep lamp body structure, shade size, base proportion, and camera angle unchanged.")}
+        >
+          Amber shade
+        </button>
+        <button
+          className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-2 text-[11px] font-bold text-zinc-200 transition hover:bg-white/[0.1]"
+          type="button"
+          onClick={() => onPromptChange("Create Amazon product image. Product must be 100% identical. Only change the background to Amazon-ready white studio presentation.")}
+        >
+          Amazon image
+        </button>
+      </div>
+
+      <ActionButton disabled={!productIdentity || !designLock || !prompt.trim()} loading={loading} icon={Wand2} onClick={onGenerate}>
+        Generate Image-to-Image Variants
+      </ActionButton>
+
+      {error ? <p className="rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p> : null}
+
+      {results.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2">
+          {results.map((result) => {
+            const selected = result.id === selectedResultId;
+            return (
+              <button
+                key={result.id}
+                className={`rounded-md border p-2 text-left transition ${
+                  selected ? "border-cyan-300/60 bg-cyan-400/10" : "border-white/10 bg-black/25 hover:bg-white/[0.05]"
+                }`}
+                type="button"
+                onClick={() => onSelectResult(result.id)}
+              >
+                <div className="aspect-square overflow-hidden rounded bg-black">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={result.imageUrl} alt={result.title} className="h-full w-full object-cover" />
+                </div>
+                <p className="mt-2 truncate text-xs font-bold text-zinc-100">{result.title}</p>
+                <p className="text-[10px] text-zinc-500">{result.source} / {result.modelName}</p>
+                <p className="mt-1 text-[10px] font-bold text-emerald-200">Consistency PASS</p>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ModelSelect({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: Array<{ id: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-zinc-500">{label}</span>
+      <select
+        className="h-9 w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-zinc-100 outline-none transition focus:border-cyan-300/60"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 

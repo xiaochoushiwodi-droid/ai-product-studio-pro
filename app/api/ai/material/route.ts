@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { buildMaterialRecommendation, simulateLatency } from "@/lib/mock-ai";
 import { validateReferenceGenerationRequest } from "@/lib/design-lock-guard";
-import type { DesignLock, ProductIdentity, ProductMaskRegionId } from "@/types/product";
+import { buildMaterialRecommendation, simulateLatency } from "@/lib/mock-ai";
+import { withCreditGuard } from "@/lib/credits";
+import { resolveReferenceGenerationPayload, type ReferenceGenerationPayload } from "@/lib/reference-generation-payload";
+import type { ProductMaskRegionId } from "@/types/product";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
+  const body = (await request.json()) as ReferenceGenerationPayload & {
     conceptId?: string;
     materialFamily?: string;
     finish?: string;
-    productIdentity?: ProductIdentity;
-    designLock?: DesignLock;
     targetRegionId?: ProductMaskRegionId;
   };
 
@@ -17,12 +17,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Concept is required" }, { status: 400 });
   }
 
-  const prompt = `Apply ${body.materialFamily || "material"} with ${body.finish || "surface finish"} to the selected product region.`;
+  const conceptId = body.conceptId;
+  const prompt = body.prompt?.trim() || `Apply ${body.materialFamily || "material"} with ${body.finish || "surface finish"} to the selected product region.`;
+  const resolved = resolveReferenceGenerationPayload(body);
   const validation = validateReferenceGenerationRequest({
-    action: "材质替换",
+    action: "material replacement",
     prompt,
-    productIdentity: body.productIdentity,
-    designLock: body.designLock,
+    originalReference: resolved.originalReference,
+    productIdentity: resolved.productIdentity,
+    designLock: resolved.designLock,
     targetRegionId: body.targetRegionId ?? "base"
   });
 
@@ -30,13 +33,30 @@ export async function POST(request: Request) {
     return NextResponse.json(validation.error, { status: validation.status });
   }
 
-  await simulateLatency(650);
+  return withCreditGuard(
+    request,
+    {
+      feature: "material_edit",
+      model: "material-edit-engine",
+      metadata: {
+        productType: validation.productIdentity.productType,
+        materialFamily: body.materialFamily,
+        targetRegionId: body.targetRegionId ?? "base"
+      }
+    },
+    async () => {
+      await simulateLatency(650);
 
-  return NextResponse.json({
-    recommendation: buildMaterialRecommendation({
-      conceptId: body.conceptId,
-      materialFamily: body.materialFamily || "Recycled Polymer",
-      finish: body.finish || "Soft matte"
-    })
-  });
+      return NextResponse.json({
+        original_reference: validation.originalReference,
+        product_identity: validation.productIdentity,
+        design_lock: validation.designLock,
+        recommendation: buildMaterialRecommendation({
+          conceptId,
+          materialFamily: body.materialFamily || "Indian Green",
+          finish: body.finish || "Polished stone"
+        })
+      });
+    }
+  );
 }

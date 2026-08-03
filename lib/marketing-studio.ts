@@ -14,15 +14,15 @@ import type {
 } from "@/types/product";
 
 export const marketingCopyModes: Array<{ id: MarketingCopyMode; label: string; goal: string }> = [
-  { id: "amazon-conversion", label: "Amazon Conversion", goal: "提高转化率" },
-  { id: "luxury-brand", label: "Luxury Brand", goal: "高端品牌感" },
-  { id: "simple-selling", label: "Simple Selling", goal: "简单直接" }
+  { id: "amazon-conversion", label: "Amazon Conversion", goal: "Increase conversion rate" },
+  { id: "luxury-brand", label: "Luxury Brand", goal: "Create premium brand feeling" },
+  { id: "simple-selling", label: "Simple Selling", goal: "Keep benefits direct and easy" }
 ];
 
 export const marketingLanguages: Array<{ id: MarketingLanguage; label: string }> = [
   { id: "en", label: "English" },
-  { id: "zh", label: "中文" },
-  { id: "ja", label: "日本語" },
+  { id: "zh", label: "Chinese" },
+  { id: "ja", label: "Japanese" },
   { id: "de", label: "Deutsch" }
 ];
 
@@ -67,7 +67,7 @@ export const amazonMarketingTemplates: MarketingTemplate[] = [
     id: "template-bedroom-scene",
     imageIndex: 5,
     kind: "lifestyle-bedroom",
-    name: "Lifestyle Image / Bedroom",
+    name: "Bedroom Scene",
     size: { width: 1600, height: 1600 },
     rules: ["Bedroom context", "Original product unchanged", "Scene background may change"],
     layoutRules: ["Ambient headline", "Small room-use label", "Avoid blocking product silhouette"],
@@ -77,16 +77,16 @@ export const amazonMarketingTemplates: MarketingTemplate[] = [
     id: "template-living-room-scene",
     imageIndex: 6,
     kind: "lifestyle-living-room",
-    name: "Lifestyle Image / Living Room",
+    name: "Living Room Scene",
     size: { width: 1600, height: 1600 },
     rules: ["Living room context", "Original product unchanged", "Scene background may change"],
     layoutRules: ["Editorial headline", "Secondary copy near lower third"],
     sceneOptions: ["Bedroom", "Living Room", "Office", "Hotel"]
   },
   {
-    id: "template-office-scene",
+    id: "template-detail-image",
     imageIndex: 7,
-    kind: "lifestyle-office",
+    kind: "detail-image",
     name: "Detail Image",
     size: { width: 1600, height: 1600 },
     rules: ["Show product details", "Use real visible components", "No new product parts"],
@@ -128,6 +128,12 @@ export function buildMarketingCopyResponse(input: {
     original_reference: input.productIdentity.imageReference,
     product_identity: input.productIdentity,
     design_lock: input.designLock,
+    requestContract: {
+      original_reference: input.productIdentity.imageReference,
+      product_identity: input.productIdentity.rawVisionJson,
+      design_lock: input.designLock,
+      prompt: "Generate Amazon selling copy from Product Identity JSON."
+    },
     rules: [
       "US Amazon consumer language",
       "English-first copy",
@@ -200,7 +206,13 @@ export function buildMarketingLayoutResponse(input: {
     },
     original_reference: input.productIdentity.imageReference,
     product_identity: input.productIdentity,
-    design_lock: input.designLock
+    design_lock: input.designLock,
+    requestContract: {
+      original_reference: input.productIdentity.imageReference,
+      product_identity: input.productIdentity.rawVisionJson,
+      design_lock: input.designLock,
+      prompt: "Auto layout Amazon marketing images using program-rendered text overlays."
+    }
   };
 }
 
@@ -236,16 +248,16 @@ function buildMarketingCopy(input: {
         imageCopy
       },
       zh: {
-        title: "现代可充电大理石台灯",
-        imageCopy: ["高级天然大理石底座", "温暖氛围光", "便携无线设计"]
+        title: "Modern Rechargeable Marble Table Lamp",
+        imageCopy: ["Premium Marble Base", "Warm Light Atmosphere", "Portable Wireless Design"]
       },
       ja: {
-        title: "モダン充電式大理石テーブルランプ",
-        imageCopy: ["高級天然大理石ベース", "暖かな間接照明", "持ち運べるワイヤレス設計"]
+        title: "Modern Rechargeable Marble Table Lamp",
+        imageCopy: ["Premium Marble Base", "Warm Light Atmosphere", "Portable Wireless Design"]
       },
       de: {
         title: "Moderne wiederaufladbare Marmor-Tischlampe",
-        imageCopy: ["Hochwertiger Marmorsockel", "Warme Lichtatmosphäre", "Kabelloses tragbares Design"]
+        imageCopy: ["Hochwertiger Marmorsockel", "Warme Lichtatmosphaere", "Kabelloses tragbares Design"]
       }
     },
     createdAt: new Date().toISOString()
@@ -303,7 +315,7 @@ function buildTemplateLayers(template: MarketingTemplate, copy: MarketingCopy): 
     return [
       textLayer(shortCopy[0] ?? "Premium Marble Base", 7, 8, 48, 36, 800),
       iconLayer("gem", "Natural Stone", 7, 68),
-      textLayer("Glass Shade / Metal Frame / Marble Base", 7, 78, 54, 19, 700)
+      textLayer("Glass Shade / Metal Ring / Marble Base", 7, 78, 54, 19, 700)
     ];
   }
 
@@ -338,7 +350,7 @@ function buildTemplateLayers(template: MarketingTemplate, copy: MarketingCopy): 
     ];
   }
 
-  if (template.kind === "lifestyle-office") {
+  if (template.kind === "detail-image") {
     return [
       textLayer("Product Details", 7, 8, 44, 36, 800),
       iconLayer("check", "Touch Dimming", 7, 67),
@@ -449,11 +461,11 @@ const imageCopyByMode: Record<MarketingCopyMode, string[]> = {
 
 const descriptionByMode: Record<MarketingCopyMode, string> = {
   "amazon-conversion":
-    "Bring warm, cordless lighting to your nightstand, shelf, or reading corner. This rechargeable marble table lamp combines a glass shade, metal frame, and natural marble base for a modern look made for everyday home use.",
+    "Bring warm, cordless lighting to your nightstand, shelf, or reading corner. This rechargeable marble table lamp combines a glass shade, metal ring, LED module, battery, and natural marble base for a modern look made for everyday home use.",
   "luxury-brand":
-    "A refined lighting accent for calm interiors, this rechargeable marble table lamp pairs a translucent glass shade with a polished metal frame and substantial natural stone base. It brings soft atmosphere to bedrooms, living rooms, boutique hospitality spaces, and curated shelves.",
+    "A refined lighting accent for calm interiors, this rechargeable marble table lamp pairs a translucent glass shade with a polished metal ring and substantial natural stone base. It brings soft atmosphere to bedrooms, living rooms, boutique hospitality spaces, and curated shelves.",
   "simple-selling":
-    "This portable rechargeable table lamp adds warm LED light wherever you need it. The marble base, glass shade, and metal frame create a clean modern look for bedrooms, living rooms, desks, and small spaces."
+    "This portable rechargeable table lamp adds warm LED light wherever you need it. The marble base, glass shade, and metal ring create a clean modern look for bedrooms, living rooms, desks, and small spaces."
 };
 
 function localizeText(text: string, language: MarketingLanguage) {
@@ -462,88 +474,22 @@ function localizeText(text: string, language: MarketingLanguage) {
   const dictionary: Record<MarketingLanguage, Record<string, string>> = {
     en: {},
     zh: {
-      "Premium Marble Base": "高级大理石灯座",
-      "Warm Light Atmosphere": "温暖氛围光",
-      "Portable Wireless Design": "便携无线设计",
-      "Modern Rechargeable Marble Table Lamp": "现代可充电大理石台灯",
-      "Luxury Rechargeable Marble Table Lamp for Elegant Interiors": "适合高级家居的奢华可充电大理石台灯",
-      "Portable Rechargeable Marble Table Lamp": "便携式可充电大理石台灯",
-      "Premium Natural Marble Base": "高级天然大理石底座",
-      "Warm Ambient Lighting": "温暖氛围照明",
-      "USB-C Rechargeable Design": "USB-C 可充电设计",
-      "Touch Dimming Control": "触控调光",
-      "Elegant Home Decoration": "优雅家居装饰",
-      "Soft Sculptural Glass Shade": "柔和雕塑感玻璃灯罩",
-      "Warm Ambient Glow for Refined Spaces": "适合精致空间的温暖光感",
-      "Rechargeable Cordless Convenience": "可充电无线使用",
-      "Elegant Accent for Bedroom or Living Room": "适合卧室和客厅的优雅点缀",
-      "Natural Marble Base": "天然大理石底座",
-      "Warm LED Light": "温暖 LED 灯光",
-      "Rechargeable and Portable": "可充电且便携",
-      "Simple Touch Control": "简单触控",
-      "Great for Home Decoration": "适合家居装饰",
-      "Natural Marble Elegance": "天然大理石质感",
-      "Soft Ambient Glow": "柔和氛围光",
-      "Cordless Luxury Accent": "无线高级装饰灯",
-      "Marble Base": "大理石底座",
-      "Warm Light": "温暖灯光",
-      "Rechargeable Design": "可充电设计"
+      "Premium Marble Base": "Premium Marble Base",
+      "Warm Light Atmosphere": "Warm Light Atmosphere",
+      "Portable Wireless Design": "Portable Wireless Design",
+      "Modern Rechargeable Marble Table Lamp": "Modern Rechargeable Marble Table Lamp"
     },
     ja: {
-      "Premium Marble Base": "高級大理石ベース",
-      "Warm Light Atmosphere": "暖かな光の雰囲気",
-      "Portable Wireless Design": "持ち運べるワイヤレス設計",
-      "Modern Rechargeable Marble Table Lamp": "モダン充電式大理石テーブルランプ",
-      "Luxury Rechargeable Marble Table Lamp for Elegant Interiors": "上質な空間のための充電式大理石テーブルランプ",
-      "Portable Rechargeable Marble Table Lamp": "ポータブル充電式大理石テーブルランプ",
-      "Premium Natural Marble Base": "高級天然大理石ベース",
-      "Warm Ambient Lighting": "暖かなアンビエント照明",
-      "USB-C Rechargeable Design": "USB-C充電式デザイン",
-      "Touch Dimming Control": "タッチ調光コントロール",
-      "Elegant Home Decoration": "上品なホームデコレーション",
-      "Soft Sculptural Glass Shade": "柔らかな造形のガラスシェード",
-      "Warm Ambient Glow for Refined Spaces": "洗練された空間に合う暖かな光",
-      "Rechargeable Cordless Convenience": "充電式コードレスの便利さ",
-      "Elegant Accent for Bedroom or Living Room": "寝室やリビングの上品なアクセント",
-      "Natural Marble Base": "天然大理石ベース",
-      "Warm LED Light": "暖かなLEDライト",
-      "Rechargeable and Portable": "充電式で持ち運び可能",
-      "Simple Touch Control": "シンプルなタッチ操作",
-      "Great for Home Decoration": "ホームデコレーションに最適",
-      "Natural Marble Elegance": "天然大理石の上質感",
-      "Soft Ambient Glow": "柔らかなアンビエント光",
-      "Cordless Luxury Accent": "コードレスの高級アクセント",
-      "Marble Base": "大理石ベース",
-      "Warm Light": "暖かな光",
-      "Rechargeable Design": "充電式デザイン"
+      "Premium Marble Base": "Premium Marble Base",
+      "Warm Light Atmosphere": "Warm Light Atmosphere",
+      "Portable Wireless Design": "Portable Wireless Design",
+      "Modern Rechargeable Marble Table Lamp": "Modern Rechargeable Marble Table Lamp"
     },
     de: {
       "Premium Marble Base": "Hochwertiger Marmorsockel",
-      "Warm Light Atmosphere": "Warme Lichtatmosphäre",
+      "Warm Light Atmosphere": "Warme Lichtatmosphaere",
       "Portable Wireless Design": "Kabelloses tragbares Design",
-      "Modern Rechargeable Marble Table Lamp": "Moderne wiederaufladbare Marmor-Tischlampe",
-      "Luxury Rechargeable Marble Table Lamp for Elegant Interiors": "Luxurioese wiederaufladbare Marmor-Tischlampe fuer elegante Interieurs",
-      "Portable Rechargeable Marble Table Lamp": "Tragbare wiederaufladbare Marmor-Tischlampe",
-      "Premium Natural Marble Base": "Hochwertiger Sockel aus Naturmarmor",
-      "Warm Ambient Lighting": "Warmes Ambiente-Licht",
-      "USB-C Rechargeable Design": "Wiederaufladbares USB-C-Design",
-      "Touch Dimming Control": "Touch-Dimmsteuerung",
-      "Elegant Home Decoration": "Elegante Wohnraumdekoration",
-      "Soft Sculptural Glass Shade": "Weich geformter Glasschirm",
-      "Warm Ambient Glow for Refined Spaces": "Warmer Lichtschein fuer stilvolle Raeume",
-      "Rechargeable Cordless Convenience": "Wiederaufladbarer kabelloser Komfort",
-      "Elegant Accent for Bedroom or Living Room": "Eleganter Akzent fuer Schlaf- oder Wohnzimmer",
-      "Natural Marble Base": "Sockel aus Naturmarmor",
-      "Warm LED Light": "Warmes LED-Licht",
-      "Rechargeable and Portable": "Wiederaufladbar und tragbar",
-      "Simple Touch Control": "Einfache Touch-Steuerung",
-      "Great for Home Decoration": "Ideal fuer Wohnraumdekoration",
-      "Natural Marble Elegance": "Eleganz aus Naturmarmor",
-      "Soft Ambient Glow": "Weicher Ambiente-Lichtschein",
-      "Cordless Luxury Accent": "Kabelloser Luxus-Akzent",
-      "Marble Base": "Marmorsockel",
-      "Warm Light": "Warmes Licht",
-      "Rechargeable Design": "Wiederaufladbares Design"
+      "Modern Rechargeable Marble Table Lamp": "Moderne wiederaufladbare Marmor-Tischlampe"
     }
   };
 

@@ -6,6 +6,15 @@ export type SellerSession = {
   marketplace: Marketplace;
 };
 
+export type ImageReference = {
+  mode: "image-reference";
+  sourceProductId: string;
+  fileName: string;
+  imageUrl: string;
+  uploadedAt: string;
+  referenceStrength: "strict";
+};
+
 export type UploadedProduct = {
   id: string;
   name: string;
@@ -16,18 +25,11 @@ export type UploadedProduct = {
   uploadedAt: string;
 };
 
-export type ImageReference = {
-  mode: "image-reference";
-  sourceProductId: string;
-  fileName: string;
-  imageUrl: string;
-  uploadedAt: string;
-  referenceStrength: "strict";
-};
+export type AllowedProductEdit = "material" | "color" | "surface_finish" | "scene_background";
 
-export type AllowedProductEdit = "材质" | "颜色" | "表面工艺" | "使用场景";
+export type ProductMaskRegionId = "shade" | "metal" | "base" | "led" | "battery" | "logo" | "light-source" | "scene";
 
-export type ProductMaskRegionId = "shade" | "metal" | "base" | "logo" | "light-source" | "scene";
+export type ProductMaskSource = "vision-segmentation" | "product-mask-engine" | "rule-based";
 
 export type ProductMaskRegion = {
   id: ProductMaskRegionId;
@@ -37,6 +39,9 @@ export type ProductMaskRegion = {
   editableProperties: AllowedProductEdit[];
   lockedNeighbors: string[];
   promptHint: string;
+  maskUrl?: string;
+  confidence: number;
+  source: ProductMaskSource;
   bounds: {
     x: number;
     y: number;
@@ -45,33 +50,48 @@ export type ProductMaskRegion = {
   };
 };
 
+export type ProductMaskEngineResult = {
+  id: string;
+  productIdentityId: string;
+  imageReference: ImageReference;
+  regions: ProductMaskRegion[];
+  requiredRegions: Array<"shade" | "base" | "metal" | "led" | "battery">;
+  source: ProductMaskSource;
+  generatedAt: string;
+};
+
 export type ProductIdentityMaterial = {
   part: string;
   material: string;
   editableProperties: AllowedProductEdit[];
 };
 
+export type VisionProductPart = {
+  name: string;
+  shape: string;
+  material: string;
+  color: string;
+  position: string;
+  locked: boolean;
+};
+
 export type VisionProductIdentityJson = {
   productType: string;
-  parts: string[];
-  materials: Array<{
-    part: string;
-    material: string;
-  }>;
+  designStyle: string;
+  brandPositioning: string;
+  parts: VisionProductPart[];
+  materials: string[];
   dimensions: {
-    heightCm?: number;
-    widthCm?: number;
-    depthCm?: number;
-    shadeCm?: number;
-    baseCm?: number;
-    summary: string;
-    relationships: string[];
+    estimatedHeight: string;
+    widthRatio: string;
+    componentRatio: string;
   };
-  editableAreas: string[];
-  designLock: {
-    locked: string[];
-    allowedEdits: string[];
-    forbiddenChanges: string[];
+  editableAreas: AllowedProductEdit[];
+  lockedAreas: string[];
+  camera: {
+    angle: string;
+    view: string;
+    lighting: string;
   };
 };
 
@@ -79,6 +99,8 @@ export type ProductIdentity = {
   id: string;
   sourceProductId: string;
   productType: string;
+  designStyle: string;
+  brandPositioning: string;
   partStructure: string[];
   materials: ProductIdentityMaterial[];
   proportions: {
@@ -91,12 +113,15 @@ export type ProductIdentity = {
     relationships: string[];
   };
   keyFeatures: string[];
-  editableAreas: string[];
+  editableAreas: AllowedProductEdit[];
+  lockedAreas: string[];
+  camera: VisionProductIdentityJson["camera"];
   maskRegions: ProductMaskRegion[];
   rawVisionJson: VisionProductIdentityJson;
   imageReference: ImageReference;
   visionModel: {
     name: string;
+    provider: VisionProviderName;
     status: "completed";
     analyzedAt: string;
   };
@@ -112,6 +137,18 @@ export type DesignLock = {
   allowedEdits: AllowedProductEdit[];
   forbiddenChanges: string[];
   validationRule: string;
+};
+
+export type VisionProviderName = "openai" | "qwen" | "zhipu" | "claude" | "mock-fallback";
+
+export type ImageProviderName = "openai-image" | "qwen-wanxiang" | "flux" | "mock-fallback";
+
+export type AIModelRegion = "global" | "china";
+
+export type AIModelSettings = {
+  region: AIModelRegion;
+  visionProvider: VisionProviderName;
+  imageProvider: ImageProviderName;
 };
 
 export type LightingKnowledgeRule = {
@@ -241,7 +278,8 @@ export type ProductAnalysis = {
     originalImage: "PASS" | "FAIL";
     productIdentity: "PASS" | "FAIL";
     designLock: "PASS" | "FAIL";
-    visionSource: "openai" | "mock-fallback";
+    productMask: "PASS" | "FAIL";
+    visionSource: VisionProviderName;
     visionModel: string;
     message?: string;
   };
@@ -253,6 +291,37 @@ export type ProductAnalysis = {
   designLevers: string[];
   complianceNotes: string[];
   estimatedPriceBand: string;
+};
+
+export type ProductConsistencyReport = {
+  passed: boolean;
+  error?: "PRODUCT_STRUCTURE_CHANGED";
+  checks: {
+    productContourConsistent: boolean;
+    shadeShapeConsistent: boolean;
+    baseProportionConsistent: boolean;
+    metalPositionConsistent: boolean;
+  };
+  reason: string;
+  modelName: string;
+  provider: VisionProviderName;
+};
+
+export type ProductImageEditVariant = {
+  id: string;
+  index: number;
+  title: string;
+  imageUrl: string;
+  resolution: string;
+  prompt: string;
+  source: ImageProviderName;
+  modelName: string;
+  imageToImageMode: true;
+  original_reference: ImageReference;
+  product_identity: ProductIdentity;
+  design_lock: DesignLock;
+  consistency: ProductConsistencyReport;
+  generatedAt: string;
 };
 
 export type DesignConcept = {
@@ -303,7 +372,7 @@ export type EngineeringExplodedPart = {
   editableScope: string;
 };
 
-export type DesignVersionKind = "product-design" | "color-edit" | "material-library" | "material-edit" | "amazon-images" | "engineering" | "marketing-layout";
+export type DesignVersionKind = "product-design" | "image-edit" | "color-edit" | "material-library" | "material-edit" | "amazon-images" | "engineering" | "marketing-layout";
 
 export type DesignVersion = {
   id: string;
@@ -339,4 +408,24 @@ export type SavedProject = {
   marketingTemplates?: MarketingTemplate[];
   savedAt: string;
   status: "Draft" | "Ready for sampling";
+};
+
+export type CloudStorageProviderName = "vercel-blob";
+
+export type CloudStoredAsset = {
+  id: string;
+  kind: "project-json" | "original-image" | "generated-image" | "version-history";
+  fileName: string;
+  url: string;
+  contentType: string;
+  size?: number;
+  createdAt: string;
+};
+
+export type CloudProjectSaveResult = {
+  provider: CloudStorageProviderName;
+  projectId: string;
+  projectUrl: string;
+  assets: CloudStoredAsset[];
+  savedAt: string;
 };

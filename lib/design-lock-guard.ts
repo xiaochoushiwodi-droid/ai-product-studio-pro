@@ -1,11 +1,14 @@
 import { getLightingRulesForRegion } from "@/lib/lighting-knowledge-base";
 import {
   buildReferenceGenerationPolicy,
+  createMissingReferenceError,
   hasStrictDesignLock,
+  hasValidImageReference,
   hasValidProductIdentity
 } from "@/lib/image-reference-workflow";
 import type {
   DesignLock,
+  ImageReference,
   ProductIdentity,
   ProductMaskRegion,
   ProductMaskRegionId,
@@ -16,25 +19,24 @@ const forbiddenPromptPatterns = [
   /redesign/i,
   /new\s+product/i,
   /different\s+product/i,
+  /random\s+product/i,
   /change\s+(the\s+)?(shape|silhouette|proportion|dimension|dimensions|structure|component\s+position|camera\s+angle)/i,
-  /(add|remove|move)\s+(a\s+)?(part|component|shade|base|frame|light\s+source)/i,
-  /replace\s+(the\s+)?(whole\s+)?(product|part|component)/i,
-  /改变(形状|轮廓|比例|尺寸|结构|零件位置|摄影角度|相机角度)/,
-  /重新(设计|创造)/,
-  /(增加|删除|移动)(零件|部件|灯罩|底座|金属|光源)/,
-  /换成(另一个|新的)产品/
+  /(add|remove|move)\s+(a\s+)?(part|component|shade|base|frame|ring|light\s+source|led|battery)/i,
+  /replace\s+(the\s+)?(whole\s+)?(product|part|component)/i
 ];
 
 const regionKeywords: Record<ProductMaskRegionId, string[]> = {
-  shade: ["shade", "lampshade", "灯罩", "玻璃灯罩"],
-  metal: ["metal", "frame", "ring", "金属", "金属环", "金属结构"],
-  base: ["base", "marble", "stone", "底座", "大理石", "石材"],
-  logo: ["logo", "brand mark", "标志", "品牌", "logo"],
-  "light-source": ["light", "led", "source", "光源", "LED", "发光"],
-  scene: ["scene", "background", "environment", "bedroom", "living room", "场景", "背景", "卧室", "客厅"]
+  shade: ["shade", "lampshade", "glass shade"],
+  metal: ["metal", "frame", "ring", "metal ring", "metal frame"],
+  base: ["base", "marble", "stone", "marble base"],
+  led: ["led", "light", "light source", "led module", "glow"],
+  battery: ["battery", "power cell", "rechargeable", "power module"],
+  logo: ["logo", "brand mark", "brand"],
+  "light-source": ["light", "led", "source", "light source", "led module", "battery"],
+  scene: ["scene", "background", "environment", "bedroom", "living room", "office", "hotel"]
 };
 
-const editActionPattern = /(change|modify|edit|replace|make|turn|apply|调整|修改|替换|改成|应用|变成)/i;
+const editActionPattern = /(change|modify|edit|replace|make|turn|apply|update|convert)/i;
 
 export function getMaskRegion(identity: ProductIdentity, regionId?: ProductMaskRegionId | null) {
   if (!regionId) return null;
@@ -44,18 +46,18 @@ export function getMaskRegion(identity: ProductIdentity, regionId?: ProductMaskR
 export function validateReferenceGenerationRequest(input: {
   action: string;
   prompt: string;
+  originalReference?: ImageReference | null;
   productIdentity?: ProductIdentity | null;
   designLock?: DesignLock | null;
   targetRegionId?: ProductMaskRegionId | null;
 }) {
-  if (!hasValidProductIdentity(input.productIdentity)) {
+  const originalReference = input.originalReference ?? input.productIdentity?.imageReference ?? null;
+
+  if (!hasValidImageReference(originalReference) || !hasValidProductIdentity(input.productIdentity)) {
     return {
       ok: false as const,
       status: 400,
-      error: {
-        error: "IMAGE_REFERENCE_REQUIRED",
-        message: `${input.action} 必须使用上传产品图片作为 reference，并先完成 Product Identity JSON。`
-      }
+      error: createMissingReferenceError(input.action)
     };
   }
 
@@ -63,7 +65,7 @@ export function validateReferenceGenerationRequest(input: {
     return {
       ok: false as const,
       status: 409,
-      error: createDesignLockViolationError("Design Lock 未开启或锁定项不完整。")
+      error: createDesignLockViolationError("Design Lock is missing or incomplete.")
     };
   }
 
@@ -72,7 +74,7 @@ export function validateReferenceGenerationRequest(input: {
     return {
       ok: false as const,
       status: 409,
-      error: createDesignLockViolationError("Prompt 试图改变产品轮廓、尺寸、结构、零件位置或摄影角度。")
+      error: createDesignLockViolationError("Prompt attempts to change a locked shape, dimension, structure, component position, or camera angle.")
     };
   }
 
@@ -81,7 +83,7 @@ export function validateReferenceGenerationRequest(input: {
     return {
       ok: false as const,
       status: 409,
-      error: createDesignLockViolationError("选择的编辑区域不存在于 Product Identity Mask。")
+      error: createDesignLockViolationError("Selected edit region does not exist in the Product Identity mask.")
     };
   }
 
@@ -89,12 +91,13 @@ export function validateReferenceGenerationRequest(input: {
     return {
       ok: false as const,
       status: 409,
-      error: createDesignLockViolationError(`当前只允许修改 ${targetRegion.label}，Prompt 触及了锁定的相邻区域。`)
+      error: createDesignLockViolationError(`Current edit is limited to ${targetRegion.label}. The prompt touches a locked neighboring region.`)
     };
   }
 
   return {
     ok: true as const,
+    originalReference,
     productIdentity: input.productIdentity,
     designLock: input.designLock,
     targetRegion,
@@ -138,6 +141,9 @@ export function buildReferencePrompt(input: {
     userPrompt: [
       input.prompt,
       input.targetRegion ? `Target mask region: ${input.targetRegion.label}. ${input.targetRegion.promptHint}` : "Target mask region: use only allowed editable areas from Product Identity.",
+      `Original reference: ${input.productIdentity.imageReference.fileName}`,
+      `Product Identity JSON: ${JSON.stringify(input.productIdentity.rawVisionJson)}`,
+      `Design Lock: ${JSON.stringify(policy.design_lock)}`,
       `Reference policy: ${policy.instruction}`,
       lightingRules.length > 0
         ? `Lighting rules: ${lightingRules.map((rule) => `${rule.title}: ${rule.rule}`).join(" | ")}`
@@ -192,7 +198,7 @@ function regionPromptTouchesLockedNeighbor(prompt: string, targetRegion: Product
 function isPreserveMention(prompt: string, keyword: string) {
   const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return (
-    new RegExp(`(preserve|keep|保持)[^。,.，;；]*${escapedKeyword}`, "i").test(prompt) ||
-    new RegExp(`${escapedKeyword}[^。,.，;；]*(unchanged|不变|保持)`, "i").test(prompt)
+    new RegExp(`(preserve|keep)[^.]*${escapedKeyword}`, "i").test(prompt) ||
+    new RegExp(`${escapedKeyword}[^.]*(unchanged|preserved|locked)`, "i").test(prompt)
   );
 }

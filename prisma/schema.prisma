@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  ADMIN_GRANT
+  ADMIN_DEDUCT
+  AI_USAGE
+  REFUND
+}
+
+model User {
+  id               String              @id @default(cuid())
+  email            String              @unique
+  role             UserRole            @default(USER)
+  status           UserStatus          @default(ACTIVE)
+  credits          Int                 @default(0)
+  totalUsedCredits Int                 @default(0) @map("total_used_credits")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  transactions     CreditTransaction[]
+  usageLogs        AIUsageLog[]
+
+  @@map("users")
+}
+
+model CreditTransaction {
+  id           String                @id @default(cuid())
+  userId       String                @map("user_id")
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         CreditTransactionType
+  amount       Int
+  balanceAfter Int                   @map("balance_after")
+  description  String?
+  provider     String?
+  externalId   String?               @map("external_id")
+  metadata     Json?
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("credit_transactions")
+}
+
+model AIUsageLog {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature     String
+  model       String
+  creditsUsed Int      @map("credits_used")
+  bypassed    Boolean  @default(false)
+  status      String   @default("SUCCESS")
+  requestId   String?  @map("request_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
+  @@map("ai_usage_logs")
+}
+
+model PricingPlan {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  name       String
+  credits    Int
+  priceCents Int      @map("price_cents")
+  currency   String   @default("USD")
+  enabled    Boolean  @default(true)
+  sortOrder  Int      @default(0) @map("sort_order")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("pricing_plans")
+}
+
+model CreditCostSetting {
+  id        String   @id @default(cuid())
+  feature   String   @unique
+  label     String
+  credits   Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("credit_cost_settings")
+}

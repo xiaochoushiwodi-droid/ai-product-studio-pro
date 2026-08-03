@@ -25,6 +25,10 @@ export function AIDebugPanel({
     {
       label: "Design Lock",
       pass: aiDebug ? aiDebug.designLock === "PASS" : hasStrictDesignLock(designLock)
+    },
+    {
+      label: "Product Mask",
+      pass: aiDebug ? aiDebug.productMask === "PASS" : Boolean(productIdentity?.maskRegions.length)
     }
   ];
 

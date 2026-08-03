@@ -5,38 +5,38 @@ import type { DesignLock, EngineeringDrawingView, EngineeringExplodedPart, Produ
 export const tableLampExplodedParts: EngineeringExplodedPart[] = [
   {
     order: 1,
-    name: "玻璃灯罩",
-    material: "玻璃",
-    role: "17cm 透光扩散件，也是主要可见颜色面。",
-    editableScope: "颜色、透明度、口沿抛光"
+    name: "Glass Shade",
+    material: "Glass",
+    role: "17 cm translucent diffuser and primary visible color surface.",
+    editableScope: "color, transparency, rim highlight, surface finish"
   },
   {
     order: 2,
-    name: "金属环",
-    material: "金属",
-    role: "固定灯罩、定位 LED，并形成可见连接线。",
-    editableScope: "表面处理、厚度、圆角半径"
+    name: "Metal Ring",
+    material: "Metal",
+    role: "Holds the shade, aligns the LED, and forms the visible connection line.",
+    editableScope: "surface finish, thickness tolerance, edge radius"
   },
   {
     order: 3,
-    name: "LED光源",
-    material: "LED模组",
-    role: "位于灯罩下方中心的发光模组。",
-    editableScope: "出光方向、扩散间隙"
+    name: "LED Module",
+    material: "LED module",
+    role: "Centered light module below the shade.",
+    editableScope: "light color and diffusion only"
   },
   {
     order: 4,
-    name: "电池",
-    material: "电池单元",
-    role: "隐藏在底座结构内的供电模块。",
-    editableScope: "检修口、安装间隙、安全标识"
+    name: "Battery",
+    material: "Battery cell",
+    role: "Hidden power module inside the base structure.",
+    editableScope: "service access and packaging note only"
   },
   {
     order: 5,
-    name: "大理石底座",
-    material: "石材",
-    role: "8cm 加重底座，负责稳定性和材质表现。",
-    editableScope: "石材种类、光泽、边缘圆角"
+    name: "Marble Base",
+    material: "Stone",
+    role: "8 cm weighted base for stability and material expression.",
+    editableScope: "stone family, gloss, edge radius, underside pad"
   }
 ];
 
@@ -44,61 +44,61 @@ export const engineeringDrawingViews: EngineeringDrawingView[] = [
   {
     id: "engineering-front-view",
     index: 1,
-    title: "正视图",
+    title: "Front View",
     viewType: "front",
     imageUrl: "/engineering/table-lamp-front.svg",
     resolution: "1600 x 1200",
     scale: "1:2",
     drawingNotes: [
-      `总高 ${tableLampDimensions.heightCm}cm`,
-      `灯罩宽度 ${tableLampDimensions.shadeCm}cm`,
-      `底座宽度 ${tableLampDimensions.baseCm}cm`,
-      "中心线对齐锁定"
+      `Overall height ${tableLampDimensions.heightCm} cm`,
+      `Shade width ${tableLampDimensions.shadeCm} cm`,
+      `Base width ${tableLampDimensions.baseCm} cm`,
+      "Center axis locked"
     ]
   },
   {
     id: "engineering-side-view",
     index: 2,
-    title: "侧视图",
+    title: "Side View",
     viewType: "side",
     imageUrl: "/engineering/table-lamp-side.svg",
     resolution: "1600 x 1200",
     scale: "1:2",
     drawingNotes: [
-      `总高 ${tableLampDimensions.heightCm}cm`,
-      "玻璃灯罩侧面轮廓",
-      "隐藏 LED 与电池堆叠",
-      "底座稳定包络"
+      `Overall height ${tableLampDimensions.heightCm} cm`,
+      "Glass shade side silhouette locked",
+      "Hidden LED and battery stack",
+      "Stable compact base envelope"
     ]
   },
   {
     id: "engineering-top-view",
     index: 3,
-    title: "顶视图",
+    title: "Top View",
     viewType: "top",
     imageUrl: "/engineering/table-lamp-top.svg",
     resolution: "1600 x 1200",
     scale: "1:2",
     drawingNotes: [
-      `灯罩直径 ${tableLampDimensions.shadeCm}cm`,
-      `底座占位 ${tableLampDimensions.baseCm}cm`,
-      "金属环与 LED 同心",
-      "电池检修区域以虚线显示"
+      `Shade diameter ${tableLampDimensions.shadeCm} cm`,
+      `Base footprint ${tableLampDimensions.baseCm} cm`,
+      "Metal ring and LED remain concentric",
+      "Battery service area shown as dashed concept"
     ]
   },
   {
     id: "engineering-exploded-view",
     index: 4,
-    title: "爆炸图",
+    title: "Exploded View",
     viewType: "exploded",
     imageUrl: "/engineering/table-lamp-exploded.svg",
     resolution: "1600 x 1200",
-    scale: "装配图",
+    scale: "assembly view",
     drawingNotes: [
-      `自动拆解为 ${tableLampParts.length} 个部件`,
+      `Automatically decomposed into ${tableLampParts.length} parts`,
       tableLampStructure,
-      "装配顺序由上到下",
-      "材质编辑目标已隔离"
+      "Assembly order from top to bottom",
+      "Material edit target remains isolated"
     ]
   }
 ];
@@ -113,6 +113,7 @@ export function buildEngineeringDrawingResponse(
   }
 ) {
   const policy = buildReferenceGenerationPolicy(context.productIdentity, context.designLock);
+  const prompt = "Generate front, side, top, and exploded engineering views from the uploaded product reference.";
 
   return {
     productName,
@@ -127,7 +128,13 @@ export function buildEngineeringDrawingResponse(
     targetRegion: context.targetRegion,
     referencePrompt: context.referencePrompt,
     generationPolicy: policy,
-    input: "生成正视图、侧视图、顶视图、爆炸图，并自动拆解产品结构。",
+    requestContract: {
+      original_reference: context.productIdentity.imageReference,
+      product_identity: context.productIdentity.rawVisionJson,
+      design_lock: policy.design_lock,
+      prompt
+    },
+    input: prompt,
     dimensions: tableLampDimensions,
     structure: tableLampStructure,
     components: tableLampParts,

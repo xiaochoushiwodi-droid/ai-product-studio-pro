@@ -22,56 +22,56 @@ export type HighResDesignVariant = {
   notes: string;
 };
 
-const protectedTableLampParts = tableLampParts.filter((part) => part !== "大理石底座");
+const protectedTableLampParts = tableLampParts.filter((part) => part !== "Marble Base");
 
 export const tableLampDesignVariants: HighResDesignVariant[] = [
   {
     id: "calacatta-viola",
-    title: "方案 01 / Calacatta Viola",
+    title: "Version 01 / Calacatta Viola",
     imageUrl: "/ai-designs/table-lamp-calacatta-viola.png",
     resolution: "2048 x 2048",
     baseMaterial: "Calacatta Viola",
-    notes: "紫色脉络白底大理石，适合高端装饰风格。"
+    notes: "Purple veined white marble base for a high-end decorative look."
   },
   {
     id: "calacatta-gold",
-    title: "方案 02 / Calacatta Gold",
+    title: "Version 02 / Calacatta Gold",
     imageUrl: "/ai-designs/table-lamp-calacatta-gold.png",
     resolution: "2048 x 2048",
     baseMaterial: "Calacatta Gold",
-    notes: "金色纹理白底大理石，提升暖奢质感。"
+    notes: "Warm gold veining on white marble for a soft luxury home style."
   },
   {
     id: "indian-green",
-    title: "方案 03 / Indian Green",
+    title: "Version 03 / Indian Green",
     imageUrl: "/ai-designs/table-lamp-indian-green.png",
     resolution: "2048 x 2048",
     baseMaterial: "Indian Green",
-    notes: "深绿色石材底座，强调稳重和自然纹理。"
+    notes: "Deep green stone base with natural veining and a stable premium feeling."
   },
   {
     id: "nero-marquina",
-    title: "方案 04 / Nero Marquina",
+    title: "Version 04 / Nero Marquina",
     imageUrl: "/ai-designs/table-lamp-nero-marquina.png",
     resolution: "2048 x 2048",
     baseMaterial: "Nero Marquina",
-    notes: "黑底白纹大理石，适合强对比高级科技风。"
+    notes: "Black marble base with white vein contrast for modern luxury."
   },
   {
     id: "travertine",
-    title: "方案 05 / Travertine",
+    title: "Version 05 / Travertine",
     imageUrl: "/ai-designs/table-lamp-travertine.png",
     resolution: "2048 x 2048",
     baseMaterial: "Travertine",
-    notes: "米色洞石纹理，适合温暖自然家居场景。"
+    notes: "Warm beige travertine grain for natural bedroom and living-room scenes."
   },
   {
     id: "white-onyx",
-    title: "方案 06 / White Onyx",
+    title: "Version 06 / White Onyx",
     imageUrl: "/ai-designs/table-lamp-white-onyx.png",
     resolution: "2048 x 2048",
     baseMaterial: "White Onyx",
-    notes: "半透白色缟玛瑙质感，强调柔和灯光氛围。"
+    notes: "Milky white semi-translucent stone expression for a soft luxury accent."
   }
 ];
 
@@ -98,18 +98,24 @@ export function buildProductDesignResponse(
     targetRegion: context.targetRegion,
     referencePrompt: context.referencePrompt,
     generationPolicy: policy,
+    requestContract: {
+      original_reference: context.productIdentity.imageReference,
+      product_identity: context.productIdentity.rawVisionJson,
+      design_lock: policy.design_lock,
+      prompt
+    },
     constraints: [
-      "Image Reference 模式：必须使用上传图片作为唯一产品参考",
-      "Design Lock：锁定产品轮廓、尺寸比例、零件位置、摄影角度",
-      "保持产品比例",
-      "保持结构",
-      "只修改材质",
-      "输出高清产品图",
-      "禁止重新创造产品"
+      "Image Reference mode: uploaded image is the only product reference.",
+      "Design Lock: silhouette, dimensions, structure, component positions, and camera angle are locked.",
+      "Preserve product proportion.",
+      "Preserve product structure.",
+      "Only modify material, color, and surface finish in the selected region.",
+      "Output high-resolution product images.",
+      "Never recreate or replace the product."
     ],
-    changedPart: "大理石底座",
+    changedPart: context.targetRegion?.partName ?? "Marble Base",
     protectedParts: protectedTableLampParts,
-    targetMaterial: "石材材质组",
+    targetMaterial: "stone material family",
     variants: tableLampDesignVariants.map((variant) => ({
       ...variant,
       imageUrl: context.productIdentity.imageReference.imageUrl,
@@ -122,8 +128,8 @@ export function buildProductDesignResponse(
       designLockApplied: true,
       targetRegion: context.targetRegion?.label ?? "Base",
       generatedPrompt: context.referencePrompt.systemPrompt,
-      allowedEdits: ["材质", "颜色", "表面工艺"],
-      lockSummary: "轮廓、比例、零件位置和摄影角度沿用上传图片；仅替换底座石材表现。"
+      allowedEdits: ["material", "color", "surface_finish"],
+      lockSummary: "Silhouette, proportions, component positions, and camera angle follow the uploaded product. Only base material expression changes."
     }))
   };
 }

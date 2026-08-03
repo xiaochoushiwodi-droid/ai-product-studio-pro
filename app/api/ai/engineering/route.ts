@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { buildEngineeringDrawingResponse } from "@/lib/engineering-drawings";
-import { simulateLatency } from "@/lib/mock-ai";
 import { validateReferenceGenerationRequest } from "@/lib/design-lock-guard";
-import type { DesignLock, ProductIdentity, ProductMaskRegionId } from "@/types/product";
+import { buildEngineeringDrawingResponse } from "@/lib/engineering-drawings";
+import { withCreditGuard } from "@/lib/credits";
+import { simulateLatency } from "@/lib/mock-ai";
+import { resolveReferenceGenerationPayload, type ReferenceGenerationPayload } from "@/lib/reference-generation-payload";
+import type { ProductMaskRegionId } from "@/types/product";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
-    productName?: string;
-    productIdentity?: ProductIdentity;
-    designLock?: DesignLock;
+  const body = (await request.json()) as ReferenceGenerationPayload & {
     targetRegionId?: ProductMaskRegionId;
   };
-
-  const prompt = "Generate engineering dimension views and exploded view from the uploaded product reference.";
+  const prompt = body.prompt?.trim() || "Generate front view, side view, top view, and exploded view from the uploaded product reference.";
+  const resolved = resolveReferenceGenerationPayload(body);
   const validation = validateReferenceGenerationRequest({
-    action: "工程尺寸图生成",
+    action: "engineering drawing generation",
     prompt,
-    productIdentity: body.productIdentity,
-    designLock: body.designLock,
+    originalReference: resolved.originalReference,
+    productIdentity: resolved.productIdentity,
+    designLock: resolved.designLock,
     targetRegionId: body.targetRegionId
   });
 
@@ -25,14 +25,27 @@ export async function POST(request: Request) {
     return NextResponse.json(validation.error, { status: validation.status });
   }
 
-  await simulateLatency(650);
+  return withCreditGuard(
+    request,
+    {
+      feature: "engineering_drawing",
+      model: "engineering-drawing-engine",
+      metadata: {
+        productType: validation.productIdentity.productType,
+        includesExplodedView: true
+      }
+    },
+    async () => {
+      await simulateLatency(650);
 
-  return NextResponse.json(
-    buildEngineeringDrawingResponse(body.productName?.trim() || "台灯", {
-      productIdentity: validation.productIdentity,
-      designLock: validation.designLock,
-      targetRegion: validation.targetRegion,
-      referencePrompt: validation.referencePrompt
-    })
+      return NextResponse.json(
+        buildEngineeringDrawingResponse(body.productName?.trim() || validation.productIdentity.productType, {
+          productIdentity: validation.productIdentity,
+          designLock: validation.designLock,
+          targetRegion: validation.targetRegion,
+          referencePrompt: validation.referencePrompt
+        })
+      );
+    }
   );
 }
